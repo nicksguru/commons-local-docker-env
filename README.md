@@ -41,7 +41,7 @@ The `/bin` directory contains the following scripts for managing the environment
 * `shell-root` - same as `shell`, but with superuser (root) privileges
 * `remove-docker-volumes` - stops services listed in `COMPOSE_PROFILES` and **erases their data** (Docker volumes)
 * `ctop` - displays CPU/RAM used by services, in interactive mode
-* `check-image-versions` - checks if newer Docker image versions are avalable on Docker Hub
+* `check-image-versions` - checks if newer Docker image versions are available on Docker Hub
 
 ## Docker Containers
 
