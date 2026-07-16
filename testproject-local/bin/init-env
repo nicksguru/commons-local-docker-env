@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#
+# Creates ../.env (which should never be committed because it contains secrets) out of ../.env.tpl by Obtaining
+# values from Config Service and decrypting them. If an error occurs Obtaining/decrypting the values, does not
+# overwrite the existing .env.
+#
+set -e
+DIR=$(dirname "$0")
+
+# exits on non-existing file thanks to '-e'
+. "$DIR/../../lib/functions.bash"
+. "$DIR/../../lib/template-functions.bash"
+
+readonly DOCKER_ENV_TEMPLATE_FILE="$DIR/../.env.tpl"
+readonly DOCKER_ENV_FILE="$DIR/../.env"
+
+DEFAULT_PASSWORD=
+
+function ask_username() {
+    read -er -i "$PROJECT" -p "Set default username (also used for DB names): " DEFAULT_USERNAME
+
+    if [ -z "$DEFAULT_USERNAME" ]; then
+        log_error "Data not entered"
+        return 1
+    fi
+}
+
+function ask_password() {
+    read -rsp "Set password for user '$DEFAULT_USERNAME' (at least 6 characters; will not be echoed): " DEFAULT_PASSWORD
+    echo
+
+    if [ "${#DEFAULT_PASSWORD}" -lt 6 ]; then
+        log_error "Password must be at least 6 characters long"
+        return 1
+    fi
+
+    read -rsp "Confirm password (will not be echoed): " CONFIRM_PASSWORD
+    echo
+
+    if [ "$CONFIRM_PASSWORD" != "$DEFAULT_PASSWORD" ]; then
+        log_error "Passwords do not match"
+        return 1
+    fi
+}
+
+PROJECT=$(cd "$DIR" && pwd)
+# derive project name from directory name: '../../project-local/bin' -> 'project'
+if [[ "$PROJECT" =~ ^.*/(.+?)-local/bin ]]; then
+  PROJECT=${BASH_REMATCH[1]}
+fi
+
+# '/' means there was no regex match above; whitespaces aren't allowed either
+if [ -z "$PROJECT" ] || [[ "$PROJECT" =~ / ]] || [[ "$PROJECT" =~ [[:space:]] ]]; then
+    log_error "Cannot infer project name from directory name '$PWD' (is this script in the right directory?)"
+    exit 1
+fi
+
+log_info "Project: $PROJECT"
+ensure_files_exist "$DOCKER_ENV_TEMPLATE_FILE"
+ensure_files_do_not_exist "$DOCKER_ENV_FILE"
+
+ask_username
+ask_password
+echo
+
+DISCLAIMER="#\n# AUTO-GENERATED FILE ($(date --iso-8601=seconds --utc)). DO NOT COMMIT TO VCS.\n#\n"
+
+log_info "Generating: $DOCKER_ENV_FILE"
+echo -e "$DISCLAIMER" > "$DOCKER_ENV_FILE"
+expand_template "$DOCKER_ENV_TEMPLATE_FILE" >> "$DOCKER_ENV_FILE"

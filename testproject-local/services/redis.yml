@@ -1,0 +1,28 @@
+#
+# This file is included in docker-compose.yml. Docker volumes are defined there.
+# Docker Compose profile: redis.
+#
+version: "3.4"
+
+x-default-policy: &default-policy
+  profiles:
+    - redis
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "1"
+
+services:
+  redis:
+    image: redis:$REDIS_IMAGE_VERSION
+    command: --appendonly "$REDIS_PERSISTENCE" --requirepass "$REDIS_PASSWORD"
+    ports:
+      - published: 6379
+        target: 6379
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [ "CMD-SHELL", "(redis-cli ping | grep -Fq 'NOAUTH ') || exit 1" ]
+    <<: *default-policy

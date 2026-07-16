@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#
+# If Docker Compose plugin is installed (see https://docs.docker.com/compose/install/linux/), then
+# there's no docker-compose executable, there's a 'docker compose' command instead.
+#
+# On systems having no such plugin, docker-compose is called. However, new docker.io versions (24.x)
+# have a different API which docker-compose doesn't understand.
+#
+if ! docker info >/dev/null 2>&1; then
+    log "ERROR" "Docker is not running or accessible"
+    exit 1
+fi
+
+docker compose version >/dev/null 2>&1
+
+if [ $? -eq 0 ]; then
+    docker compose "$@"
+else
+    docker-compose "$@"
+fi

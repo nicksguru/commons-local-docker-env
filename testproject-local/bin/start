@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#
+# (Re)starts Docker containers.
+# To start profile-based containers: 'COMPOSE_PROFILES=java-apps ./start'.
+#
+set -e
+DIR=$(dirname "$0")
+
+# exits on non-existing file thanks to '-e'
+. "$DIR/../../lib/functions.bash"
+# exits if .env is missing
+load_env_file
+
+# remove the following items which are OLDER THAN 30 DAYS, otherwise disk space gets used up eventually:
+# * unused build cache
+# * ALL stopped containers (NOT ONLY RELATED TO THIS COMPOSITION)
+# * ALL unused networks
+# * ALL dangling images
+docker system prune -f --filter "until=$((30*24))h"
+
+(cd "$DIR/.." &&
+  ./docker-compose up --build --remove-orphans -d "$@" &&
+  ./docker-compose ps)

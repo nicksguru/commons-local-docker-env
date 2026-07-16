@@ -1,0 +1,67 @@
+volumes:
+  redis-data:
+  postgres-data:
+  # cluster (even if there's a single node)
+  mongodb-shard1-node1-data:
+  mongodb-router-data:
+  kafka-data:
+
+services:
+  ###########################################################################
+  #
+  # PostgreSQL.
+  # Docker Compose profile: postgres.
+  #
+  postgres:
+    extends:
+      file: services/postgres.yml
+      service: postgres
+  postgres-maintenance:
+    extends:
+      file: services/postgres.yml
+      service: postgres-maintenance
+
+  ###########################################################################
+  #
+  # Keycloak.
+  # Docker Compose profile: keycloak.
+  #
+  keycloak:
+    extends:
+      file: services/keycloak.yml
+      service: keycloak
+
+  ###########################################################################
+  #
+  # Redis.
+  # Docker Compose profile: redis.
+  #
+  redis:
+    extends:
+      file: services/redis.yml
+      service: redis
+
+  ###########################################################################
+  #
+  # MongoDB cluster.
+  # Docker Compose profile: mongodb.
+  #
+  mongodb:
+    extends:
+      file: services/mongodb.yml
+      service: mongodb
+
+  ###########################################################################
+  #
+  # Kafka.
+  # Docker Compose profile: kafka.
+  #
+  akhq:
+    extends:
+      file: services/kafka.yml
+      service: akhq
+
+  kafka:
+    extends:
+      file: services/kafka.yml
+      service: kafka

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# Enters Docker container's shell (always as root user, regardless of container user). Arguments:
+# $1 - container name
+# $2 - optional Shell, e.g. 'ash'; default is 'bash'
+# * all the rest - passed to remote shell, for example 'ls -l'
+#
+set -e
+DIR=$(dirname "$0")
+
+# exits on non-existing file thanks to '-e'
+. "$DIR/../../lib/functions.bash"
+# exits if .env is missing
+load_env_file
+
+CONTAINER=${1?Missing container name}
+shift
+SHELL=${1:-bash}
+
+# fails if no more arguments
+set +e
+shift
+set -e
+
+(cd "$DIR/.." &&
+  ./docker-compose exec --user root "$CONTAINER" "$SHELL" "$@")

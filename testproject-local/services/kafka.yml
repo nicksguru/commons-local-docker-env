@@ -1,0 +1,83 @@
+#
+# This file is included in docker-compose.yml. Docker volumes are defined there.
+# Docker Compose profile: kafka.
+#
+version: "3.4"
+
+x-default-policy: &default-policy
+  profiles:
+    - kafka
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "1"
+
+#
+# Kafka + Kafka UI + KSQL server.
+#
+services:
+  # Kafka UI
+  akhq:
+    image: tchiotludo/akhq:$AKHQ_IMAGE_VERSION
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    ports:
+      # mnemonic: Kafka is $KAFKA1_EXTERNAL_PORT, GUI is 8092
+      - published: 8092
+        target: 8080
+    environment:
+      AKHQ_CONFIGURATION: |
+        akhq:
+          connections:
+            kafka-cluster:
+              properties:
+                bootstrap.servers: kafka:$KAFKA1_INTERNAL_PORT
+    <<: *default-policy
+
+  kafka:
+    image: confluentinc/confluent-local:$KAFKA_IMAGE_VERSION
+    deploy:
+      resources:
+        limits:
+          memory: 800m
+    ports:
+      - published: 9092
+        target: 9092
+    labels:
+      "cluster.node.role": data
+    # see https://docs.confluent.io/platform/current/installation/docker/config-reference.html#cp-kafka-example
+    # and https://github.com/confluentinc/kafka-images/blob/7.4.x/local/include/etc/confluent/docker/configureDefaults
+    environment:
+      - KAFKA_NODE_ID=1
+      - KAFKA_ADVERTISED_LISTENERS=INSIDE://kafka:$KAFKA1_INTERNAL_PORT,OUTSIDE://localhost:$KAFKA1_EXTERNAL_PORT
+      - KAFKA_LISTENERS=INSIDE://kafka:$KAFKA1_INTERNAL_PORT,OUTSIDE://:$KAFKA1_EXTERNAL_PORT,CONTROLLER://kafka:$KAFKA1_CONTROLLER_PORT
+      # vote via controller ports, this setting is the SAME for ALL nodes
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:$KAFKA1_CONTROLLER_PORT
+      - KAFKA_REST_BOOTSTRAP_SERVERS=localhost:$KAFKA1_INTERNAL_PORT
+      # below are the settings that are the same for all nodes
+      - CLUSTER_ID=$KAFKA_CLUSTER_ID
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT,CONTROLLER:PLAINTEXT
+        # enforce 1 (no replication) if these 3 variables are > 1 (designed for a cluster)
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_DEFAULT_REPLICATION_FACTOR=1
+      - TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_RECEIVE_BUFFER_BYTES
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE
+      - KAFKA_MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS
+      - KAFKA_NUM_PARTITIONS
+      - KAFKA_MIN_INSYNC_REPLICAS
+      - TRANSACTION_STATE_LOG_MIN_ISR
+      - KAFKA_LOG_RETENTION_MS
+      - KAFKA_SESSION_TIMEOUT_MS
+      - KAFKA_HEARTBEAT_INTERVAL_MS
+      - KAFKA_INTER_BROKER_LISTENER_NAME=INSIDE
+      - KAFKA_BROKER_RACK
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: [ "CMD-SHELL", "kafka-topics --list --bootstrap-server localhost:$KAFKA1_EXTERNAL_PORT || exit 1" ]
+    <<: *default-policy

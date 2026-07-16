@@ -1,0 +1,65 @@
+#
+# This file is included in docker-compose.yml. Docker volumes are defined there.
+# Docker Compose profile: mongodb.
+#
+version: "3.4"
+
+x-default-policy: &default-policy
+  profiles:
+    - mongodb
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "1"
+
+#
+# MongoDB single-node replica set. This is the very minimal config to make transactions work.
+# 
+services:
+  mongodb:
+    image: mongo:$MONGO_IMAGE_VERSION
+    hostname: $MONGO_REPLICASET_SHARD1_NODE1
+    command: mongod --bind_ip_all --replSet "$MONGO_REPLICASET_NAME" --keyFile "$MONGO_REPLICASET_KEYFILE"
+    labels:
+      "cluster.role": data
+    ports:
+      - published: 27017
+        target: 27017
+    volumes:
+      - mongodb-shard1-node1-data:/data/db
+      # For storing keyfile. In a cluster consisting of more than 1 node, this volume should belong to Mongo Router.
+      - mongodb-router-data:/data/router
+    environment:
+      - MONGO_REPLICASET_NAME
+      - MONGO_REPLICASET_KEYFILE
+      - MONGO_INITDB_ROOT_USERNAME=$MONGODB_USERNAME
+      - MONGO_INITDB_ROOT_PASSWORD=$MONGODB_PASSWORD
+      - MONGO_INITDB_DATABASE=$MONGODB_DATABASE
+    # Create keyfile once. In a cluster consisting of more than 1 node, this should be Mongo Router's entry point.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if [ ! -r "$$MONGO_REPLICASET_KEYFILE" ]; then
+          echo "Creating replicaset keyfile: '$$MONGO_REPLICASET_KEYFILE'"
+          openssl rand -base64 756 > "$$MONGO_REPLICASET_KEYFILE"
+          chown 999:999 "$$MONGO_REPLICASET_KEYFILE"
+          chmod 0400 "$$MONGO_REPLICASET_KEYFILE"
+        fi
+        exec docker-entrypoint.sh $$@
+    # Initialize replica set on the fly. In a cluster consisting of more than 1 node, this should be in Mongo Router.
+    healthcheck:
+      #test: [ "CMD-SHELL", "mongosh --eval 'quit(db.runCommand({ ping: 1 }).ok ? 0: 1)' || exit 1" ]
+      test: |
+        test $$(mongosh \
+          -u "$$MONGO_INITDB_ROOT_USERNAME" \
+          -p "$$MONGO_INITDB_ROOT_PASSWORD" \
+          --quiet \
+          --eval "try { \
+            rs.initiate({_id: '$$MONGO_REPLICASET_NAME', members: [{_id: 0, host: '$$MONGO_REPLICASET_SHARD1_NODE1'}] }).ok \
+          } catch (err) { \
+            rs.status().ok \
+          }") -eq 1
+    <<: *default-policy

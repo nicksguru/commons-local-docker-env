@@ -1,0 +1,41 @@
+#
+# This file is included in docker-compose.yml. Docker volumes are defined there.
+# Docker Compose profile: keycloak.
+#
+version: "3.4"
+
+x-default-policy: &default-policy
+  profiles:
+    - keycloak
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "1"
+
+services:
+  keycloak:
+    image: keycloak/keycloak:$KEYCLOAK_IMAGE_VERSION
+    # use 'start --optimized' for production (HTTPS-only) mode
+    command: start-dev
+    deploy:
+      resources:
+        limits:
+          memory: 1600m
+    ports:
+      - published: 8401
+        target: 8080
+    # see https://www.keycloak.org/server/containers#_relevant_options
+    # (KC_PROXY_HEADERS means trust Forwarded header set by Nginx),
+    # otherwise Login form always redirects to localhost)
+    environment:
+      - KC_PROXY_HEADERS=forwarded
+      - KEYCLOAK_ADMIN
+      - KEYCLOAK_ADMIN_PASSWORD
+      - KC_HEALTH_ENABLED=true
+      - KC_DB=$SQL_HOST
+      - KC_DB_URL=jdbc:postgresql://$SQL_HOST/$SQL_KEYCLOAK_DATABASE
+      - KC_DB_USERNAME=$SQL_USER
+      - KC_DB_PASSWORD=$SQL_PASSWORD
+    <<: *default-policy

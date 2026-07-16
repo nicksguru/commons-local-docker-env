@@ -1,0 +1,22 @@
+# everything that starts with a dot
+.*
+
+.idea/
+*.iml
+
+tmp/
+*.tmp
+*.log
+*.log.*
+*.swp
+*.bak
+
+# certificates
+#*.jks
+*.p12
+*.pem
+*.der
+#*.csr
+#*.crt
+*.key
+*.key~

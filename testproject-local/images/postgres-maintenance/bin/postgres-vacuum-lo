@@ -1,0 +1,3 @@
+#!/bin/sh
+
+"$CRON_CUSTOM_SCRIPTS_DIR/pgsql-maintenance.sh" vacuum_lo

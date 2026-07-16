@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#
+# Stops Docker containers. No need for .env or another env-file because
+# stopping containers doesn't depend on env.
+#
+# WARNING: passing '-v' or '--volumes' removes all project's Docker volumes
+# without any confirmation!
+#
+set -e
+DIR=$(dirname "$0")
+# exits on non-existing file thanks to '-e'
+. "$DIR/../../lib/functions.bash"
+
+# exits if .env is missing
+load_env_file
+
+(cd "$DIR/.." &&
+  ./docker-compose down --remove-orphans "$@")

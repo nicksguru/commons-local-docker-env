@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#
+# Displays Docker container processes.
+#
+set -e
+DIR=$(dirname "$0")
+
+# exits on non-existing file thanks to '-e'
+. "$DIR/../../lib/functions.bash"
+# exits if .env is missing
+load_env_file
+
+(cd "$DIR/.." &&
+  ./docker-compose ps "$@")

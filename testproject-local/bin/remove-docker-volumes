@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#
+# REMOVES ALL DOCKER VOLUMES for this project.
+#
+set -e
+DIR=$(dirname "$0")
+
+# exits on non-existing file thanks to '-e'
+. "$DIR/../../lib/functions.bash"
+# exits if .env is missing
+load_env_file
+
+ANSWER="n"
+read -er -p "Remove all Docker volumes for this project? ALL DATA WILL BE LOST! [y/n] " -i "$ANSWER" ANSWER
+echo
+
+if [ "$ANSWER" = "y" ] || [ "$ANSWER" = "Y" ]; then
+    (cd "$DIR/.." &&
+        ./docker-compose down --remove-orphans --volumes)
+else
+    log_warn "The answer was not positive, doing nothing"
+fi

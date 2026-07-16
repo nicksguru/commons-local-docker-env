@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+#
+# Displays checkboxes to enable/disable Docker services (updates COMPOSE_PROFILES in .env and restarts the services).
+#
+set -e
+DIR=$(dirname "$0")
+
+# exits on non-existing file thanks to '-e'
+. "$DIR/../../lib/functions.bash"
+# exits if .env is missing
+load_env_file
+
+ENV_FILE="$(dirname "$0")/../.env"
+
+if [ ! -x "$(which dialog)" ]; then
+    log_error "Please install 'dialog' command, for example: apt-get install dialog"
+    exit 1
+fi
+
+readonly DIALOG_HEIGHT=20
+readonly DIALOG_WIDTH=30
+readonly LIST_HEIGHT=15
+
+#
+# Creates choices for 'dialog --checklist' ('Option1 1 on Option2 2 off') out of ALL_COMPOSE_PROFILES.
+#
+function create_choices() {
+    # split words (having no whitespaces!) by comma
+    local -r OLD_IFS=$IFS
+    IFS=,
+    declare -a ALL_PROFILES=($ALL_COMPOSE_PROFILES)
+    declare -a ENABLED_PROFILES=($COMPOSE_PROFILES)
+
+    # sort array for user convenience
+    IFS=$'\n'
+    ALL_PROFILES=($(sort <<<"${ALL_PROFILES[*]}"))
+    IFS=$OLD_IFS
+
+    # don't print anything, as it'll become function output
+    #echo "${ALL_PROFILES[@]} :: ${ENABLED_PROFILES[@]}"
+    local choices=()
+
+    # create 'Choice 123 on' or 'Choice 123 off'
+    for i in "${!ALL_PROFILES[@]}"; do
+        local flag="off"
+
+        if find_in_array "${ALL_PROFILES[$i]}" "${ENABLED_PROFILES[@]}"; then
+            flag="on"
+        fi
+
+        choices+=("${ALL_PROFILES[$i]} $((i + 1)) $flag")
+    done
+
+    # return choices as a string, e.g. 'Choice1 1 on Choice2 2 off'
+    echo "${choices[@]}"
+}
+
+CHOICES=$(create_choices)
+#log_debug" "$CHOICES"; exit
+
+# if Cancel is pressed, dialog exit status is 1, which causes the script to terminate
+SELECTED=$(dialog --erase-on-exit --ascii-lines --default-button cancel --backtitle 'Docker Compose' \
+    --output-separator , --checklist 'Enable services' \
+    "$DIALOG_HEIGHT" "$DIALOG_WIDTH" "$LIST_HEIGHT" ${CHOICES[@]} \
+    2>&1 >/dev/tty);
+
+# post-process result: ',a,b,c' -> 'a,b,c'
+SELECTED=$(sed -e 's/^,//' <<<"$SELECTED")
+
+# put all services in COMPOSE_PROFILES to stop them all
+log_info "Stopping all Docker services"
+echo
+sed --in-place -e 's/^[[:space:]]*\(COMPOSE_PROFILES=\).*$/\1'"$ALL_COMPOSE_PROFILES"'/' "$ENV_FILE"
+"$DIR/stop"
+echo
+
+log_info "Updating '$ENV_FILE': COMPOSE_PROFILES=$SELECTED"
+log_info "Starting selected Docker services"
+echo
+sed --in-place -e 's/^[[:space:]]*\(COMPOSE_PROFILES=\).*$/\1'"$SELECTED"'/' "$ENV_FILE"
+"$DIR/start"
