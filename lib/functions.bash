@@ -12,6 +12,8 @@ if [[ -t 1 && -t 2 ]]; then
     readonly COLOR_WARN='\033[0;33m'    # yellow
     readonly COLOR_INFO='\033[0;32m'    # green
     readonly COLOR_DEBUG='\033[0;36m'   # cyan
+    readonly BOLD='\033[1m'
+# when not in a terminal, each color code becomes a no-op, so messages become plain text
 else
     # not in a terminal - use empty strings to avoid escape sequences in output
     readonly COLOR_RESET=''
@@ -19,6 +21,7 @@ else
     readonly COLOR_WARN=''
     readonly COLOR_INFO=''
     readonly COLOR_DEBUG=''
+    readonly BOLD=''
 fi
 
 #

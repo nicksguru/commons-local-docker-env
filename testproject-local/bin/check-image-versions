@@ -55,8 +55,8 @@ readonly COL_UPDATE_LABEL="Update"
 # The longest value. No '<<<' because it adds a newline.
 COL_UPDATE_WIDTH=$(echo -n "$UPDATE_SPECIAL" | wc -m)
 
-# bold text
-readonly BOLD='\033[1m'
+# grey
+readonly COLOR_INFO_BULLET='\033[0;38;5;242m'
 
 #
 # Parses input file and builds global associative arrays of Docker image tags and infos.
@@ -600,8 +600,7 @@ function print_summary() {
                 local infos="${IMAGES_INFO_MAP[$image]}"
 
                 while IFS= read -r note; do
-                      #echo -e "    • $note"
-                      echo -e "    ${COLOR_INFO}${BOLD}✅${COLOR_RESET}$note"
+                      echo -e "    ${COLOR_INFO_BULLET}${BOLD}✅${COLOR_RESET}$note"
                 done <<< "$infos"
             fi
             
