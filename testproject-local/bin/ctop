@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
+#
+# Acts like 'top', but for Docker containers -
+# system-wide, not limited to this Docker Compose stack.
+#
 
 docker run --rm -ti --name=ctop -v /var/run/docker.sock:/var/run/docker.sock wrfly/ctop -i

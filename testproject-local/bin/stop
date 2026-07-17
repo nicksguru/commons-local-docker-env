@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Stops Docker containers. No need for .env or another env-file because
-# stopping containers doesn't depend on env.
+# Stops services listed in COMPOSE_PROFILES (see '.env').
+# If any arguments are passed, they are treated as space-separated service names to stop.
 #
 # WARNING: passing '-v' or '--volumes' removes all project's Docker volumes
 # without any confirmation!

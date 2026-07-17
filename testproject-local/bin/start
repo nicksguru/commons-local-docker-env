@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# (Re)starts Docker containers.
-# To start profile-based containers: 'COMPOSE_PROFILES=java-apps ./start'.
+# (Re)starts services listed in COMPOSE_PROFILES (see '.env').
+# If any arguments are passed, they are treated as space-separated service names to start.
 #
 set -e
 DIR=$(dirname "$0")

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
 # Monitors Docker container logs in real time.
+# If no arguments are passed, all the services are monitored (in this Docker Compose stack).
+# If any arguments are passed, they are treated as space-separated service names to monitor.
 #
 set -e
 DIR=$(dirname "$0")

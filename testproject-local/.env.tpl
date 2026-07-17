@@ -4,7 +4,7 @@ PROJECT=$PROJECT
 # Start only some of the services. Shareable services, such as Keycloak/ClickHouse, are supposed to reside on a
 # dedicated server.
 #
-# WARNING: stopping the services is subject to profiles too, i.e. only such services will be stopped that are mentioned
+# NOTE: stopping the services is subject to profiles too, i.e. only such services will be stopped that are mentioned
 # in COMPOSE_PROFILES.
 #
 COMPOSE_PROFILES=postgres,mongodb,redis,kafka
@@ -15,9 +15,11 @@ COMPOSE_PROFILES=postgres,mongodb,redis,kafka
 ALL_COMPOSE_PROFILES=postgres,mongodb,redis,kafka,keycloak
 
 #############################################################################
+# each xx_VERSION variable is prefixed with '#TAG: image_url' and optional multiple '# NOTE: message'
 
 # TAG: https://hub.docker.com/r/timescale/timescaledb-ha/tags
-# (keep version number in sync with TestContainers and update it here only after integration tests succeed!)
+# NOTE: 🛇 new versions are not discovered due to complex format, please check them manually
+# NOTE: keep version number in sync with TestContainers
 POSTGRES_IMAGE_VERSION=pg18.4-ts2.28.2
 
 # inside Docker
@@ -40,8 +42,10 @@ SQL_VAULT_TABLE=vault_kv_store
 #############################################################################
 
 # TAG: https://hub.docker.com/_/mongo/tags
-# (keep version number in sync with TestContainers!)
-MONGO_IMAGE_VERSION=8.3.4-noble
+# NOTE: 🛇  fails to start under Linux kernel 6.19 and 7.x, see https://jira.mongodb.org/browse/SERVER-125742
+# NOTE: the license is SSPL (AGPLv3 with amendments for cloud providers)
+# NOTE: keep version number in sync with TestContainers
+MONGO_IMAGE_VERSION=8.3.4
 
 MONGO_REPLICASET_NAME=rs0
 # must be on a volume
@@ -57,7 +61,8 @@ MONGODB_PASSWORD=${DEFAULT_PASSWORD}
 #############################################################################
 
 # TAG: https://hub.docker.com/_/redis/tags
-# starting with v8.0, Redis license reverted to AGPLv3
+# NOTE: starting with v8.0, the license reverted to AGPLv3
+# NOTE: keep version number in sync with TestContainers
 REDIS_IMAGE_VERSION=8.8.0-alpine
 
 REDIS_HOST=redis
@@ -92,7 +97,7 @@ KAFKA_RECEIVE_BUFFER_BYTES=1000000
 KAFKA_MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS=86400000
 
 # Default number of log partitions per topic: it's better to 'overprovision' this, to avoid repartitioning in future.
-# WARNING: a value greater than 1 can break certain consumers which rely on the global order of messages
+# NOTE: a value greater than 1 can break certain consumers which rely on the global order of messages
 # (this setting applies to auto-creation of new topics only).
 KAFKA_NUM_PARTITIONS=1
 
@@ -109,7 +114,7 @@ KAFKA1_INTERNAL_PORT=9192
 KAFKA1_CONTROLLER_PORT=9292
 
 #############################################################################
-# each xx_VERSION variable is prefixed with '#TAG: image_url' and optional multiple '# WARNING: message'
+# each xx_VERSION variable is prefixed with '#TAG: image_url' and optional multiple '# NOTE: message'
 
 # TAG: https://hub.docker.com/r/keycloak/keycloak/tags
 KEYCLOAK_IMAGE_VERSION=26.7.0-0

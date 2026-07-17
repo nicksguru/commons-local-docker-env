@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
 # Displays Docker container processes.
+# If no arguments are passed, all the services are listed (in this Docker Compose stack).
+# If any arguments are passed, they are treated as space-separated service names to list.
 #
 set -e
 DIR=$(dirname "$0")

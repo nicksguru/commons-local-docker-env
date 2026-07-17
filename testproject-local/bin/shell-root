@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Enters Docker container's shell (always as root user, regardless of container user). Arguments:
-# $1 - container name
-# $2 - optional Shell, e.g. 'ash'; default is 'bash'
+# Enters Docker container's shell (as root user!). Arguments:
+# * $1 - container name
+# * $2 - optional Shell, e.g. 'ash'; default is 'bash'
 # * all the rest - passed to remote shell, for example 'ls -l'
 #
 set -e

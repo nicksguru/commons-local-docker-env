@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Displays checkboxes to enable/disable Docker services (updates COMPOSE_PROFILES in .env and restarts the services).
+# Displays checkboxes to enable/disable Docker services.
+# Updates COMPOSE_PROFILES in '.env' file and restarts the services.
 #
 set -e
 DIR=$(dirname "$0")

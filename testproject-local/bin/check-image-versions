@@ -1,8 +1,12 @@
 #!/bin/bash
 #
-# This script dynamically parses the '.env' file to extract Docker image information,
-# checks Docker Hub for the latest versions, and compares them with current ones.
-# Images are automatically discovered from TAG comments in the file.
+# This script dynamically parses '.env' to extract Docker image information,
+# checks Docker Hub for the latest versions,
+# and compares them with current ones.
+#
+# The image URLs are automatically discovered from '# TAG: url' comments in the file.
+# '# NOTE: message' comments used to add notes to the output. Leading warning (⚠) and prohibition (🛇) characters are
+# highlighted and used as list bullet points.
 #
 DIR="$(dirname "$0")"
 
@@ -14,7 +18,7 @@ set +e
 
 readonly INPUT_FILE="$DIR/../.env"
 readonly SLEEP_IF_TOO_MANY_REQUESTS=5s
-readonly SLEEP_BETWEEN_IMAGE_REQUESTS=0.5s
+readonly SLEEP_BETWEEN_IMAGE_REQUESTS=0.3s
 
 # Update types. For no update, print nothing to reduce visual noise.
 readonly UPDATE_NONE=""
@@ -55,22 +59,23 @@ readonly NC='\033[0m'
 readonly BOLD='\033[1m'
 
 #
-# Parses input file and builds global associative arrays of Docker image tags and warnings. Only 'hub.docker.com' URLs
-# are recognized.
+# Parses input file and builds global associative arrays of Docker image tags and notes.
+# Only 'hub.docker.com' URLs are recognized.
 #
-# Sets global associative array IMAGES_MAP with keys as repository names and values as 'variable_name:version' pairs.
+# Sets global associative array IMAGES_MAP with keys as repository names and values
+# as 'variable_name:version' pairs.
 #
-# Sets global associative array IMAGES_WARNINGS_MAP with keys as repository names and values as warning messages
-# (newline-separated).
+# Sets global associative array IMAGES_NOTES_MAP with keys as repository names and values
+# as notes (newline-separated).
 #
 # Example: IMAGES_MAP["redis"]="REDIS_VERSION:16.4"
 #          IMAGES_MAP["confluentinc/cp-kafka"]="KAFKA_VERSION:8.0.1"
-#          IMAGES_WARNINGS_MAP["redis"]="This version has known security issues"
-#          IMAGES_WARNINGS_MAP["confluentinc/cp-kafka"]="Breaking changes in recent versions"
+#          IMAGES_NOTES_MAP["redis"]="This version has known security issues"
+#          IMAGES_NOTES_MAP["confluentinc/cp-kafka"]="Breaking changes in recent versions"
 #
-# Captures '# WARNING:' comments that appear after TAG comments and before the image version assignment. This prevents
-#  misassociation of unrelated warnings with Docker images. The warnings are collected until a version variable is
-#  found, then associated with that image.
+# Captures '# NOTE:' comments that appear after TAG comments and before the image version assignment. This prevents
+# misassociation of unrelated notes with Docker images. The notes are collected until a version variable is found, then
+# associated with that image.
 #
 # @param $1   path to '.env' file to parse
 #
@@ -78,13 +83,13 @@ function parse_input_file() {
     local -r env_file=${1?Missing env_file}
     # associative array to store repo:var:version
     declare -gA IMAGES_MAP
-    # associative array to store repo:warning messages
-    declare -gA IMAGES_WARNINGS_MAP
+    # associative array to store repo:note messages
+    declare -gA IMAGES_NOTES_MAP
 
     local current_repo=""
     local current_var=""
     local current_version=""
-    local current_warnings=()
+    local current_notes=()
     local line
     
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -104,21 +109,21 @@ function parse_input_file() {
             # unknown format - reset and skip
             else
                 current_repo=""
-                current_warnings=()
+                current_notes=()
                 continue
             fi
             
-            # reset version info and warnings for next iteration
+            # reset version info and notes for next iteration
             current_var=""
             current_version=""
-            current_warnings=()
+            current_notes=()
             continue
         fi
         
-        # check for WARNING comment (only after TAG comment)
-        if [[ -n "$current_repo" && "$line" =~ ^#[[:space:]]*WARNING:[[:space:]]*(.*)$ ]]; then
-            local warning_msg="${BASH_REMATCH[1]}"
-            current_warnings+=("$warning_msg")
+        # check for NOTE comment (only after TAG comment)
+        if [[ -n "$current_repo" && "$line" =~ ^#[[:space:]]*NOTE:[[:space:]]*(.*)$ ]]; then
+            local note_msg="${BASH_REMATCH[1]}"
+            current_notes+=("$note_msg")
             continue
         fi
         
@@ -134,10 +139,10 @@ function parse_input_file() {
                     # store in associative array: key=repo, value=var:version
                     IMAGES_MAP["$current_repo"]="$current_var:$current_version"
                     
-                    # join warnings with newline separator
-                    if [[ ${#current_warnings[@]} -gt 0 ]]; then
+                    # join notes with newline separator
+                    if [[ ${#current_notes[@]} -gt 0 ]]; then
                         local IFS=$'\n'
-                        IMAGES_WARNINGS_MAP["$current_repo"]="${current_warnings[*]}"
+                        IMAGES_NOTES_MAP["$current_repo"]="${current_notes[*]}"
                     fi
                 fi
                 
@@ -145,7 +150,7 @@ function parse_input_file() {
                 current_repo=""
                 current_var=""
                 current_version=""
-                current_warnings=()
+                current_notes=()
             fi
         fi
     done < "$env_file"
@@ -476,7 +481,7 @@ function fetch_latest_docker_image_tag() {
 
 
 #
-# Prints summary statistics and warnings section.
+# Prints summary statistics and repository notes.
 #
 # @param $1   total number of images checked
 # @param $2   total number of images with updates
@@ -496,27 +501,34 @@ function print_summary() {
     echo
     echo "Total images checked: $total_images"
     echo "Images with updates:  $total_updates"
-    echo -e "  * $UPDATE_MAJOR:   $COLOR_UPDATE_MAJOR$major_updates$NC"
-    echo -e "  * $UPDATE_MINOR:   $COLOR_UPDATE_MINOR$minor_updates$NC"
-    echo -e "  * $UPDATE_PATCH:   $COLOR_UPDATE_PATCH$patch_updates$NC"
-    echo -e "  * $UPDATE_SPECIAL: $COLOR_UPDATE_SPECIAL$special_updates$NC"
+    echo -e "  • $UPDATE_MAJOR:   $COLOR_UPDATE_MAJOR$major_updates$NC"
+    echo -e "  • $UPDATE_MINOR:   $COLOR_UPDATE_MINOR$minor_updates$NC"
+    echo -e "  • $UPDATE_PATCH:   $COLOR_UPDATE_PATCH$patch_updates$NC"
+    echo -e "  • $UPDATE_SPECIAL: $COLOR_UPDATE_SPECIAL$special_updates$NC"
     echo
 
-    # display warnings section if any warnings exist
-    if [[ ${#IMAGES_WARNINGS_MAP[@]} -gt 0 ]]; then
-        echo -e "${BOLD}Warnings:${NC}"
+    # display notes, if any
+    if [[ ${#IMAGES_NOTES_MAP[@]} -gt 0 ]]; then
+        echo -e "${BOLD}Notes:${NC}"
 
-        # Sort images alphabetically for consistent output
-        declare -a sorted_images_with_warnings
-        mapfile -t sorted_images_with_warnings < <(printf '%s\n' "${!IMAGES_WARNINGS_MAP[@]}" | sort)
+        # sort images alphabetically for consistent output
+        declare -a sorted_images_with_notes
+        mapfile -t sorted_images_with_notes < <(printf '%s\n' "${!IMAGES_NOTES_MAP[@]}" | sort)
         
-        for image in "${sorted_images_with_warnings[@]}"; do
-            echo -e "  ${BOLD}$image${NC}"
-            local warnings="${IMAGES_WARNINGS_MAP[$image]}"
+        for image in "${sorted_images_with_notes[@]}"; do
+            echo -e "  • ${BOLD}$image${NC}"
+            local notes="${IMAGES_NOTES_MAP[$image]}"
 
-            while IFS= read -r warning; do
-                echo "    ⚠ $warning"
-            done <<< "$warnings"
+            while IFS= read -r note; do
+              # highlight warning/prohibition signs (the colors are defined in functions.bash) and use them as bullets
+              if [[ "$note" =~ ^[⚠🛇] ]]; then
+                note="${note//⚠/${COLOR_WARN}${BOLD}⚠$NC}"
+                note="${note//🛇/${COLOR_ERROR}${BOLD}🛇$NC}"
+                echo -e "    $note"
+              else
+                echo "    • $note"
+              fi
+            done <<< "$notes"
             echo
         done
     fi

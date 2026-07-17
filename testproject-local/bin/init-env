@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 #
-# Creates ../.env (which should never be committed because it contains secrets) out of ../.env.tpl by Obtaining
-# values from Config Service and decrypting them. If an error occurs Obtaining/decrypting the values, does not
-# overwrite the existing .env.
+# Creates '../.env' (which should never be committed because it contains secrets) out of '../.env.tpl'.
 #
 set -e
 DIR=$(dirname "$0")
@@ -12,7 +10,7 @@ DIR=$(dirname "$0")
 . "$DIR/../../lib/template-functions.bash"
 
 readonly DOCKER_ENV_TEMPLATE_FILE="$DIR/../.env.tpl"
-readonly DOCKER_ENV_FILE="$DIR/../.env"
+readonly DOCKER_ENV_FILE=${DOCKER_ENV_TEMPLATE_FILE%.tpl}
 
 DEFAULT_PASSWORD=
 
@@ -45,7 +43,7 @@ function ask_password() {
 
 PROJECT=$(cd "$DIR" && pwd)
 # derive project name from directory name: '../../project-local/bin' -> 'project'
-if [[ "$PROJECT" =~ ^.*/(.+?)-local/bin ]]; then
+if [[ "$PROJECT" =~ ^.*/(.+?)-local/ ]]; then
   PROJECT=${BASH_REMATCH[1]}
 fi
 
