@@ -5,8 +5,10 @@
 # and compares them with current ones.
 #
 # The image URLs are automatically discovered from '# TAG: url' comments in the file.
-# '# NOTE: message' comments used to add notes to the output. Leading warning (⚠) and prohibition (🛇) characters are
-# highlighted and used as list bullet points.
+#
+# '# INFO: message'     comments add warnings to the output (like log levels).
+# '# WARNING: message'  comments add warnings to the output.
+# '# ERROR: message'    comments add errors to the output.
 #
 DIR="$(dirname "$0")"
 
@@ -53,43 +55,56 @@ readonly COL_UPDATE_LABEL="Update"
 # The longest value. No '<<<' because it adds a newline.
 COL_UPDATE_WIDTH=$(echo -n "$UPDATE_SPECIAL" | wc -m)
 
-# no color (resets both color and bold style)
-readonly NC='\033[0m'
 # bold text
 readonly BOLD='\033[1m'
 
 #
-# Parses input file and builds global associative arrays of Docker image tags and notes.
+# Parses input file and builds global associative arrays of Docker image tags and infos.
 # Only 'hub.docker.com' URLs are recognized.
 #
 # Sets global associative array IMAGES_MAP with keys as repository names and values
 # as 'variable_name:version' pairs.
 #
-# Sets global associative array IMAGES_NOTES_MAP with keys as repository names and values
-# as notes (newline-separated).
+# Sets global associative array IMAGES_INFO_MAP with keys as repository names and values
+# as infos (newline-separated).
+#
+# Sets global associative array IMAGES_WARNINGS_MAP with keys as repository names and values
+# as warnings (newline-separated).
+#
+# Sets global associative array IMAGES_ERRORS_MAP with keys as repository names and values
+# as errors (newline-separated).
 #
 # Example: IMAGES_MAP["redis"]="REDIS_VERSION:16.4"
 #          IMAGES_MAP["confluentinc/cp-kafka"]="KAFKA_VERSION:8.0.1"
-#          IMAGES_NOTES_MAP["redis"]="This version has known security issues"
-#          IMAGES_NOTES_MAP["confluentinc/cp-kafka"]="Breaking changes in recent versions"
+#          IMAGES_INFO_MAP["redis"]="This engine is fast"
+#          IMAGES_WARNINGS_MAP["confluentinc/cp-kafka"]="Breaking changes in recent versions"
+#          IMAGES_ERRORS_MAP["confluentinc/cp-kafka"]="This version has critical bugs"
 #
-# Captures '# NOTE:' comments that appear after TAG comments and before the image version assignment. This prevents
-# misassociation of unrelated notes with Docker images. The notes are collected until a version variable is found, then
-# associated with that image.
+# Captures '# INFO:', '# WARNING:', and '# ERROR:' comments that appear after TAG comments and before the image
+# version assignment. This prevents misassociation of unrelated infos with Docker images. The comments are collected
+# until a version variable is found, then associated with that image.
 #
 # @param $1   path to '.env' file to parse
 #
 function parse_input_file() {
     local -r env_file=${1?Missing env_file}
+
     # associative array to store repo:var:version
     declare -gA IMAGES_MAP
     # associative array to store repo:note messages
-    declare -gA IMAGES_NOTES_MAP
+    declare -gA IMAGES_INFO_MAP
+    # associative array to store repo:warning messages
+    declare -gA IMAGES_WARNINGS_MAP
+    # associative array to store repo:error messages
+    declare -gA IMAGES_ERRORS_MAP
 
     local current_repo=""
     local current_var=""
     local current_version=""
-    local current_notes=()
+    
+    local current_infos=()
+    local current_warnings=()
+    local current_errors=()
     local line
     
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -109,21 +124,39 @@ function parse_input_file() {
             # unknown format - reset and skip
             else
                 current_repo=""
-                current_notes=()
+                current_infos=()
+                current_warnings=()
+                current_errors=()
                 continue
             fi
             
-            # reset version info and notes for next iteration
+            # reset version info and infos for next iteration
             current_var=""
             current_version=""
-            current_notes=()
+            current_infos=()
+            current_warnings=()
+            current_errors=()
             continue
         fi
         
-        # check for NOTE comment (only after TAG comment)
-        if [[ -n "$current_repo" && "$line" =~ ^#[[:space:]]*NOTE:[[:space:]]*(.*)$ ]]; then
-            local note_msg="${BASH_REMATCH[1]}"
-            current_notes+=("$note_msg")
+        # check for INFO comment (only after TAG comment)
+        if [[ -n "$current_repo" && "$line" =~ ^#[[:space:]]*INFO:[[:space:]]*(.*)$ ]]; then
+            local info_msg="${BASH_REMATCH[1]}"
+            current_infos+=("$info_msg")
+            continue
+        fi
+        
+        # check for WARNING comment (only after TAG comment)
+        if [[ -n "$current_repo" && "$line" =~ ^#[[:space:]]*WARNING:[[:space:]]*(.*)$ ]]; then
+            local warning_msg="${BASH_REMATCH[1]}"
+            current_warnings+=("$warning_msg")
+            continue
+        fi
+        
+        # check for ERROR comment (only after TAG comment)
+        if [[ -n "$current_repo" && "$line" =~ ^#[[:space:]]*ERROR:[[:space:]]*(.*)$ ]]; then
+            local error_msg="${BASH_REMATCH[1]}"
+            current_errors+=("$error_msg")
             continue
         fi
         
@@ -139,10 +172,22 @@ function parse_input_file() {
                     # store in associative array: key=repo, value=var:version
                     IMAGES_MAP["$current_repo"]="$current_var:$current_version"
                     
-                    # join notes with newline separator
-                    if [[ ${#current_notes[@]} -gt 0 ]]; then
+                    # join infos with newline separator
+                    if [[ ${#current_infos[@]} -gt 0 ]]; then
                         local IFS=$'\n'
-                        IMAGES_NOTES_MAP["$current_repo"]="${current_notes[*]}"
+                        IMAGES_INFO_MAP["$current_repo"]="${current_infos[*]}"
+                    fi
+                    
+                    # join warnings with newline separator
+                    if [[ ${#current_warnings[@]} -gt 0 ]]; then
+                        local IFS=$'\n'
+                        IMAGES_WARNINGS_MAP["$current_repo"]="${current_warnings[*]}"
+                    fi
+                    
+                    # join errors with newline separator
+                    if [[ ${#current_errors[@]} -gt 0 ]]; then
+                        local IFS=$'\n'
+                        IMAGES_ERRORS_MAP["$current_repo"]="${current_errors[*]}"
                     fi
                 fi
                 
@@ -150,7 +195,10 @@ function parse_input_file() {
                 current_repo=""
                 current_var=""
                 current_version=""
-                current_notes=()
+
+                current_infos=()
+                current_warnings=()
+                current_errors=()
             fi
         fi
     done < "$env_file"
@@ -338,7 +386,7 @@ function print_table_header() {
     generate_horizontal_line "┌" "┬" "┐"
 
     # row number header is right-aligned
-    printf "│ ${BOLD}%*s${NC} │ ${BOLD}%-*s${NC} │ ${BOLD}%-*s${NC} │ ${BOLD}%-*s${NC} │ ${BOLD}%-*s${NC} │\n" \
+    printf "│ ${BOLD}%*s${COLOR_RESET} │ ${BOLD}%-*s${COLOR_RESET} │ ${BOLD}%-*s${COLOR_RESET} │ ${BOLD}%-*s${COLOR_RESET} │ ${BOLD}%-*s${COLOR_RESET} │\n" \
         "$COL_NUM_WIDTH" "$COL_NUM_LABEL" \
         "$COL_IMAGE_WIDTH" "$COL_IMAGE_LABEL" \
         "$COL_LOCAL_WIDTH" "$COL_LOCAL_LABEL" \
@@ -374,22 +422,28 @@ function print_table_row() {
     local update
     local update_color
 
-    if [[ "$update_type" == "major" ]]; then
-        update_color="$COLOR_UPDATE_MAJOR"
-        update="$UPDATE_MAJOR"
-    elif [[ "$update_type" == "minor" ]]; then
-        update_color="$COLOR_UPDATE_MINOR"
-        update="$UPDATE_MINOR"
-    elif [[ "$update_type" == "patch" ]]; then
-        update_color="$COLOR_UPDATE_PATCH"
-        update="$UPDATE_PATCH"
-    elif [[ "$update_type" == "unknown" ]]; then
-        update_color="$COLOR_UPDATE_SPECIAL"
-        update="$UPDATE_SPECIAL"
-    else
-      update_color="$COLOR_UPDATE_NONE"
-      update="${UPDATE_NONE}"
-    fi
+    case "$update_type" in
+        "major")
+            update_color="$COLOR_UPDATE_MAJOR"
+            update="$UPDATE_MAJOR"
+            ;;
+        "minor")
+            update_color="$COLOR_UPDATE_MINOR"
+            update="$UPDATE_MINOR"
+            ;;
+        "patch")
+            update_color="$COLOR_UPDATE_PATCH"
+            update="$UPDATE_PATCH"
+            ;;
+        "unknown")
+            update_color="$COLOR_UPDATE_SPECIAL"
+            update="$UPDATE_SPECIAL"
+            ;;
+        *)
+            update_color="$COLOR_UPDATE_NONE"
+            update="${UPDATE_NONE}"
+            ;;
+    esac
     
     # truncate all fields to exact column widths
     local -r truncated_image="${image:0:$COL_IMAGE_WIDTH}"
@@ -398,7 +452,7 @@ function print_table_row() {
     local -r truncated_update="${update:0:$COL_UPDATE_WIDTH}"
 
     # row number is right-aligned
-    printf "│ ${update_color}%*s${NC} │ ${update_color}%-*s${NC} │ ${update_color}%-*s${NC} │ ${update_color}%-*s${NC} │ ${update_color}%-*s${NC} │\n" \
+    printf "│ ${update_color}%*s${COLOR_RESET} │ ${update_color}%-*s${COLOR_RESET} │ ${update_color}%-*s${COLOR_RESET} │ ${update_color}%-*s${COLOR_RESET} │ ${update_color}%-*s${COLOR_RESET} │\n" \
         "$COL_NUM_WIDTH" "$row_num" \
         "$COL_IMAGE_WIDTH" "$truncated_image" \
         "$COL_LOCAL_WIDTH" "$truncated_current" \
@@ -481,7 +535,7 @@ function fetch_latest_docker_image_tag() {
 
 
 #
-# Prints summary statistics and repository notes.
+# Prints summary statistics and repository infos.
 #
 # @param $1   total number of images checked
 # @param $2   total number of images with updates
@@ -501,34 +555,56 @@ function print_summary() {
     echo
     echo "Total images checked: $total_images"
     echo "Images with updates:  $total_updates"
-    echo -e "  • $UPDATE_MAJOR:   $COLOR_UPDATE_MAJOR$major_updates$NC"
-    echo -e "  • $UPDATE_MINOR:   $COLOR_UPDATE_MINOR$minor_updates$NC"
-    echo -e "  • $UPDATE_PATCH:   $COLOR_UPDATE_PATCH$patch_updates$NC"
-    echo -e "  • $UPDATE_SPECIAL: $COLOR_UPDATE_SPECIAL$special_updates$NC"
+    echo -e "  • $UPDATE_MAJOR:   ${COLOR_UPDATE_MAJOR}${major_updates}${COLOR_RESET}"
+    echo -e "  • $UPDATE_MINOR:   ${COLOR_UPDATE_MINOR}${minor_updates}${COLOR_RESET}"
+    echo -e "  • $UPDATE_PATCH:   ${COLOR_UPDATE_PATCH}${patch_updates}${COLOR_RESET}"
+    echo -e "  • $UPDATE_SPECIAL: ${COLOR_UPDATE_SPECIAL}${special_updates}${COLOR_RESET}"
     echo
 
-    # display notes, if any
-    if [[ ${#IMAGES_NOTES_MAP[@]} -gt 0 ]]; then
-        echo -e "${BOLD}Notes:${NC}"
+    # Get all unique images that have errors, warnings, or infos. Can't just join the 3 arrays with a '\n - empty arrays
+    # would result in an empty string and therefore empty item.
+    declare -a all_images
+    mapfile -t all_images < <({
+        [[ ${#IMAGES_ERRORS_MAP[@]} -gt 0 ]] && printf '%s\n' "${!IMAGES_ERRORS_MAP[@]}"
+        [[ ${#IMAGES_WARNINGS_MAP[@]} -gt 0 ]] && printf '%s\n' "${!IMAGES_WARNINGS_MAP[@]}"
+        [[ ${#IMAGES_INFO_MAP[@]} -gt 0 ]] && printf '%s\n' "${!IMAGES_INFO_MAP[@]}"
+    } | sort -u)
 
-        # sort images alphabetically for consistent output
-        declare -a sorted_images_with_notes
-        mapfile -t sorted_images_with_notes < <(printf '%s\n' "${!IMAGES_NOTES_MAP[@]}" | sort)
-        
-        for image in "${sorted_images_with_notes[@]}"; do
-            echo -e "  • ${BOLD}$image${NC}"
-            local notes="${IMAGES_NOTES_MAP[$image]}"
+    # for each image, first print its errors, then warnings, then infos
+    if [[ ${#all_images[@]} -gt 0 ]]; then
+        echo -e "${BOLD}Notes:${COLOR_RESET}"
 
-            while IFS= read -r note; do
-              # highlight warning/prohibition signs (the colors are defined in functions.bash) and use them as bullets
-              if [[ "$note" =~ ^[⚠🛇] ]]; then
-                note="${note//⚠/${COLOR_WARN}${BOLD}⚠$NC}"
-                note="${note//🛇/${COLOR_ERROR}${BOLD}🛇$NC}"
-                echo -e "    $note"
-              else
-                echo "    • $note"
-              fi
-            done <<< "$notes"
+        for image in "${all_images[@]}"; do
+            echo -e "  • ${BOLD}$image${COLOR_RESET}"
+            
+            # display errors first
+            if [[ -v IMAGES_ERRORS_MAP[$image] ]]; then
+                local errors="${IMAGES_ERRORS_MAP[$image]}"
+
+                while IFS= read -r error; do
+                    echo -e "    ${COLOR_ERROR}${BOLD}🛇 ${COLOR_RESET}$error"
+                done <<< "$errors"
+            fi
+            
+            # then warnings
+            if [[ -v IMAGES_WARNINGS_MAP[$image] ]]; then
+                local warnings="${IMAGES_WARNINGS_MAP[$image]}"
+
+                while IFS= read -r warning; do
+                    echo -e "    ${COLOR_WARN}${BOLD}❗${COLOR_RESET}$warning"
+                done <<< "$warnings"
+            fi
+            
+            # then infos
+            if [[ -v IMAGES_INFO_MAP[$image] ]]; then
+                local infos="${IMAGES_INFO_MAP[$image]}"
+
+                while IFS= read -r note; do
+                      #echo -e "    • $note"
+                      echo -e "    ${COLOR_INFO}${BOLD}✅${COLOR_RESET}$note"
+                done <<< "$infos"
+            fi
+            
             echo
         done
     fi
@@ -569,7 +645,7 @@ function main() {
     for image_info in "${DOCKER_IMAGES[@]}"; do
         # rate limiting delay
         if [ "$row_num" -gt 1 ] ; then
-          sleep "$SLEEP_BETWEEN_IMAGE_REQUESTS"
+            sleep "$SLEEP_BETWEEN_IMAGE_REQUESTS"
         fi
 
         IFS=':' read -r image variable_name current_version <<< "$image_info"
@@ -589,15 +665,13 @@ function main() {
         # count updates
         if [[ "$update_type" != "none" ]]; then
             ((total_updates++))
-            if [[ "$update_type" == "major" ]]; then
-                ((major_updates++))
-            elif [[ "$update_type" == "minor" ]]; then
-                ((minor_updates++))
-            elif [[ "$update_type" == "patch" ]]; then
-                ((patch_updates++))
-            else
-                ((special_updates++))
-            fi
+
+          case "$update_type" in
+              "major") ((major_updates++));;
+              "minor") ((minor_updates++));;
+              "patch") ((patch_updates++));;
+              *) ((special_updates++));;
+          esac
         fi
 
         print_table_row "$row_num" "$image" "$current_version" "$latest_tag" "$update_type"
