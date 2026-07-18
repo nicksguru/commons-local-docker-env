@@ -21,6 +21,7 @@ set +e
 readonly INPUT_FILE="$DIR/../.env"
 readonly SLEEP_IF_TOO_MANY_REQUESTS=5s
 readonly SLEEP_BETWEEN_IMAGE_REQUESTS=0.3s
+readonly V_BORDER="│"
 
 # Update types. For no update, print nothing to reduce visual noise.
 # For the same reason, use the same color for all update types.
@@ -454,12 +455,12 @@ function print_table_row() {
     local -r truncated_update="${update:0:$COL_UPDATE_WIDTH}"
 
     # row number is right-aligned
-    printf "│ ${update_color}%*s${COLOR_RESET} │ ${update_color}%-*s${COLOR_RESET} │ ${update_color}%-*s${COLOR_RESET} │ ${update_color}%-*s${COLOR_RESET} │ ${update_color}%-*s${COLOR_RESET} │\n" \
-        "$COL_NUM_WIDTH" "$row_num" \
-        "$COL_IMAGE_WIDTH" "$truncated_image" \
-        "$COL_LOCAL_WIDTH" "$truncated_current" \
-        "$COL_LATEST_WIDTH" "$truncated_latest" \
-        "$COL_UPDATE_WIDTH" "$truncated_update"
+    printf "│ ${update_color}%*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s\n" \
+        "$COL_NUM_WIDTH" "$row_num"             "$V_BORDER" \
+        "$COL_IMAGE_WIDTH" "$truncated_image"   "$V_BORDER" \
+        "$COL_LOCAL_WIDTH" "$truncated_current" "$V_BORDER" \
+        "$COL_LATEST_WIDTH" "$truncated_latest" "$V_BORDER" \
+        "$COL_UPDATE_WIDTH" "$truncated_update" "$V_BORDER"
     print_image_notes "$image"
 }
 
@@ -541,22 +542,65 @@ function fetch_latest_docker_image_tag() {
 # For the given image, prints IMAGES_ERRORS_MAP entries, then IMAGES_WARNINGS_MAP entries, then IMAGES_INFO_MAP entries.
 #
 # @param $1   prefix string (e.g., "│    │   ")
-# @param $2   indent width
+# @param $2   max. message width (for left-alignment)
 # @param $3   color code
 # @param $4   icon
 # @param $5   messages (newline-separated)
 #
 function print_notes_with_color() {
     local -r prefix=${1?Missing prefix}
-    local -r indent_width=${2?Missing indent_width}
+    local -r max_width=${2?Missing max_width}
     local -r color=${3?Missing color}
     local -r icon=${4?Missing icon}
     local -r messages=${5?Missing messages}
-    
+
+    local -ri max_width_for_2_borders=$((max_width - COL_UPDATE_WIDTH - 3))
+    local -ri max_width_for_3_borders=$((max_width_for_2_borders - COL_LATEST_WIDTH - 3))
+    local -ri max_width_for_4_borders=$((max_width_for_2_borders - COL_LATEST_WIDTH - 3 - COL_LOCAL_WIDTH - 3))
+    #echo "max_width_for_2_borders=$max_width_for_2_borders; max_width_for_3_borders=$max_width_for_3_borders; max_width_for_4_borders=$max_width_for_4_borders"
+    # arguments to prints: max. width (for alignment), text
+    local -r aligned_text="%-*s"
+
     while IFS= read -r message; do
         echo -ne "$prefix${color}${BOLD}${icon}${COLOR_RESET}${color}"
-        printf "%-*s" "$indent_width" "$message"
-        echo -e "${COLOR_RESET}│"
+
+        # test cases:
+        # no border
+#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        # 1 border
+#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        # 2 borders
+#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        # 3 borders
+#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        # 4 borders
+#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+        # print: message | empty column | empty column | empty column |
+        if [ "${#message}" -le $max_width_for_4_borders ]; then
+            printf "${aligned_text}${COLOR_RESET}%s${aligned_text}%s${aligned_text}%s${aligned_text}%s\n" \
+                "$max_width_for_4_borders" "$message" "${V_BORDER}" \
+                "$((COL_LOCAL_WIDTH + 2))"  ""        "${V_BORDER}" \
+                "$((COL_LATEST_WIDTH + 2))" ""        "${V_BORDER}" \
+                "$((COL_UPDATE_WIDTH + 2))" ""        "${V_BORDER}"
+        # print: message | empty column | empty column |
+        elif [ "${#message}" -le $max_width_for_3_borders ]; then
+            printf "${aligned_text}${COLOR_RESET}%s${aligned_text}%s${aligned_text}%s\n" \
+                "$max_width_for_3_borders" "$message" "${V_BORDER}" \
+                "$((COL_LATEST_WIDTH + 2))" ""        "${V_BORDER}" \
+                "$((COL_UPDATE_WIDTH + 2))" ""        "${V_BORDER}"
+        # print: message | empty column |
+        elif [ "${#message}" -le $max_width_for_2_borders ]; then
+            printf "${aligned_text}${COLOR_RESET}%s${aligned_text}%s\n" \
+                "$max_width_for_2_borders" "$message" "${V_BORDER}" \
+                "$((COL_UPDATE_WIDTH + 2))" ""        "${V_BORDER}"
+        # print: message |
+        elif [ "${#message}" -le $max_width ]; then
+            printf "${aligned_text}${COLOR_RESET}%s\n" "$max_width" "$message" "${V_BORDER}"
+        # print: message (no border because the message is too long)
+        else
+            echo -e "${message}${COLOR_RESET}"
+        fi
     done <<< "$messages"
 }
 
@@ -570,22 +614,23 @@ function print_image_notes() {
 
     # content + borders
     local -r row_width=$((COL_NUM_WIDTH + COL_IMAGE_WIDTH + COL_LOCAL_WIDTH + COL_LATEST_WIDTH + COL_UPDATE_WIDTH + 6))
-    local -r prefix="│    │   "
-    local -r indent_width=$((row_width - ${#prefix} + 7))
+    # the first column (empty in this case) is the row number
+    local -r prefix="│    │ "
+    local -r max_width=$((row_width - ${#prefix} + 7))
 
     # display errors first
     if [[ -v IMAGES_ERRORS_MAP[$image] ]]; then
-        print_notes_with_color "$prefix" "$indent_width" "$COLOR_ERROR" "🛇 " "${IMAGES_ERRORS_MAP[$image]}"
+        print_notes_with_color "$prefix" "$max_width" "$COLOR_ERROR" "🛇 " "${IMAGES_ERRORS_MAP[$image]}"
     fi
 
     # then warnings
     if [[ -v IMAGES_WARNINGS_MAP[$image] ]]; then
-        print_notes_with_color "$prefix" "$indent_width" "$COLOR_WARN" "❗" "${IMAGES_WARNINGS_MAP[$image]}"
+        print_notes_with_color "$prefix" "$max_width" "$COLOR_WARN" "❗" "${IMAGES_WARNINGS_MAP[$image]}"
     fi
 
     # then infos
     if [[ -v IMAGES_INFO_MAP[$image] ]]; then
-        print_notes_with_color "$prefix" "$indent_width" "$COLOR_INFO_BULLET" "✅" "${IMAGES_INFO_MAP[$image]}"
+        print_notes_with_color "$prefix" "$max_width" "$COLOR_INFO_BULLET" "✅" "${IMAGES_INFO_MAP[$image]}"
     fi
 }
 
