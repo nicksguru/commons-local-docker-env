@@ -407,6 +407,7 @@ function print_table_footer() {
 
 #
 # Formats output with box-drawing characters and configurable fixed column widths.
+# Also used to print a separator row, in which case all the arguments are empty strings.
 #
 # @param $1   Docker image name
 # @param $2   current version
@@ -539,6 +540,29 @@ function fetch_latest_docker_image_tag() {
 #
 # For the given image, prints IMAGES_ERRORS_MAP entries, then IMAGES_WARNINGS_MAP entries, then IMAGES_INFO_MAP entries.
 #
+# @param $1   prefix string (e.g., "│    │   ")
+# @param $2   indent width
+# @param $3   color code
+# @param $4   icon
+# @param $5   messages (newline-separated)
+#
+function print_notes_with_color() {
+    local -r prefix=${1?Missing prefix}
+    local -r indent_width=${2?Missing indent_width}
+    local -r color=${3?Missing color}
+    local -r icon=${4?Missing icon}
+    local -r messages=${5?Missing messages}
+    
+    while IFS= read -r message; do
+        echo -ne "$prefix${color}${BOLD}${icon}${COLOR_RESET}${color}"
+        printf "%-*s" "$indent_width" "$message"
+        echo -e "${COLOR_RESET}│"
+    done <<< "$messages"
+}
+
+#
+# For the given image, prints IMAGES_ERRORS_MAP entries, then IMAGES_WARNINGS_MAP entries, then IMAGES_INFO_MAP entries.
+#
 # @param $1   image name (the key for the above maps)
 #
 function print_image_notes() {
@@ -551,35 +575,17 @@ function print_image_notes() {
 
     # display errors first
     if [[ -v IMAGES_ERRORS_MAP[$image] ]]; then
-        local errors="${IMAGES_ERRORS_MAP[$image]}"
-
-        while IFS= read -r message; do
-            echo -ne "$prefix${COLOR_ERROR}${BOLD}🛇 ${COLOR_RESET}${COLOR_ERROR}"
-            printf "%-*s" "$indent_width" "$message"
-            echo -e "${COLOR_RESET}│"
-        done <<< "$errors"
+        print_notes_with_color "$prefix" "$indent_width" "$COLOR_ERROR" "🛇 " "${IMAGES_ERRORS_MAP[$image]}"
     fi
 
     # then warnings
     if [[ -v IMAGES_WARNINGS_MAP[$image] ]]; then
-        local warnings="${IMAGES_WARNINGS_MAP[$image]}"
-
-        while IFS= read -r message; do
-            echo -ne "$prefix${COLOR_WARN}${BOLD}❗${COLOR_RESET}${COLOR_WARN}"
-            printf "%-*s" "$indent_width" "$message"
-            echo -e "${COLOR_RESET}│"
-        done <<< "$warnings"
+        print_notes_with_color "$prefix" "$indent_width" "$COLOR_WARN" "❗" "${IMAGES_WARNINGS_MAP[$image]}"
     fi
 
     # then infos
     if [[ -v IMAGES_INFO_MAP[$image] ]]; then
-        local infos="${IMAGES_INFO_MAP[$image]}"
-
-        while IFS= read -r message; do
-            echo -ne "$prefix${COLOR_INFO_BULLET}${BOLD}✅${COLOR_RESET}${COLOR_INFO_BULLET}"
-            printf "%-*s" "$indent_width" "$message"
-            echo -e "${COLOR_RESET}│"
-        done <<< "$infos"
+        print_notes_with_color "$prefix" "$indent_width" "$COLOR_INFO_BULLET" "✅" "${IMAGES_INFO_MAP[$image]}"
     fi
 }
 
@@ -644,9 +650,10 @@ function main() {
 
     local -i row_num=1
     for image_info in "${DOCKER_IMAGES[@]}"; do
-        # rate limiting delay
+        # rate limiting delay and separator row (especially useful if the previous image had notes)
         if [ "$row_num" -gt 1 ] ; then
             sleep "$SLEEP_BETWEEN_IMAGE_REQUESTS"
+            print_table_row "" "" "" "" ""
         fi
 
         IFS=':' read -r image variable_name current_version <<< "$image_info"
