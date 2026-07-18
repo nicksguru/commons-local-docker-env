@@ -42,7 +42,7 @@ SQL_VAULT_TABLE=vault_kv_store
 #############################################################################
 
 # TAG: https://hub.docker.com/_/mongo/tags
-# ERROR: fails to start under Linux kernel 6.19 and 7.x, see https://jira.mongodb.org/browse/SERVER-125742
+# ERROR: crashes under Linux kernel 6.19+, 7.x (https://jira.mongodb.org/browse/SERVER-125742)
 # INFO: the license is SSPL (AGPLv3 with amendments for cloud providers)
 # INFO: keep version number in sync with TestContainers
 MONGO_IMAGE_VERSION=8.3.4

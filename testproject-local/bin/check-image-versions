@@ -23,20 +23,21 @@ readonly SLEEP_IF_TOO_MANY_REQUESTS=5s
 readonly SLEEP_BETWEEN_IMAGE_REQUESTS=0.3s
 
 # Update types. For no update, print nothing to reduce visual noise.
+# For the same reason, use the same color for all update types.
 readonly UPDATE_NONE=""
 readonly COLOR_UPDATE_NONE='\033[0;00m'    #  black
 #
 readonly UPDATE_MAJOR="major"
-readonly COLOR_UPDATE_MAJOR='\033[0;31m'   # red
+readonly COLOR_UPDATE_MAJOR='\033[0;34m'   # blue
 #
 readonly UPDATE_MINOR="minor"
 readonly COLOR_UPDATE_MINOR='\033[0;34m'   # blue
 #
 readonly UPDATE_PATCH="patch"
-readonly COLOR_UPDATE_PATCH='\033[0;36m'   # cyan
+readonly COLOR_UPDATE_PATCH='\033[0;34m'   # blue
 #
 readonly UPDATE_SPECIAL="special"
-readonly COLOR_UPDATE_SPECIAL='\033[0;33m' # special updates e.g. adding 4th component
+readonly COLOR_UPDATE_SPECIAL='\033[0;34m' # special updates e.g. adding 4th component
 
 # table columns
 readonly COL_NUM_LABEL="#"
@@ -91,11 +92,11 @@ function parse_input_file() {
 
     # associative array to store repo:var:version
     declare -gA IMAGES_MAP
-    # associative array to store repo:note messages
+    # associative array to store repo:message messages
     declare -gA IMAGES_INFO_MAP
-    # associative array to store repo:warning messages
+    # associative array to store repo:message messages
     declare -gA IMAGES_WARNINGS_MAP
-    # associative array to store repo:error messages
+    # associative array to store repo:message messages
     declare -gA IMAGES_ERRORS_MAP
 
     local current_repo=""
@@ -425,7 +426,7 @@ function print_table_row() {
     case "$update_type" in
         "major")
             update_color="$COLOR_UPDATE_MAJOR"
-            update="$UPDATE_MAJOR"
+            update="${UPDATE_MAJOR^^}"
             ;;
         "minor")
             update_color="$COLOR_UPDATE_MINOR"
@@ -458,7 +459,9 @@ function print_table_row() {
         "$COL_LOCAL_WIDTH" "$truncated_current" \
         "$COL_LATEST_WIDTH" "$truncated_latest" \
         "$COL_UPDATE_WIDTH" "$truncated_update"
+    print_image_notes "$image"
 }
+
 #
 # Fetches latest valid Docker image tag from Docker Hub.
 # Example:
@@ -486,7 +489,7 @@ function fetch_latest_docker_image_tag() {
     # try to fetch tags from Docker Hub API
     local -r url="https://hub.docker.com/v2/repositories/${api_image}/tags?page_size=100"
     local latest_tag=""
-    local attempt
+    local -i attempt
 
     # make API request with retries
     for attempt in {1..3}; do
@@ -533,6 +536,52 @@ function fetch_latest_docker_image_tag() {
     return 1
 }
 
+#
+# For the given image, prints IMAGES_ERRORS_MAP entries, then IMAGES_WARNINGS_MAP entries, then IMAGES_INFO_MAP entries.
+#
+# @param $1   image name (the key for the above maps)
+#
+function print_image_notes() {
+    local -r image=${1?Missing image}
+
+    # content + borders
+    local -r row_width=$((COL_NUM_WIDTH + COL_IMAGE_WIDTH + COL_LOCAL_WIDTH + COL_LATEST_WIDTH + COL_UPDATE_WIDTH + 6))
+    local -r prefix="│    │   "
+    local -r indent_width=$((row_width - ${#prefix} + 7))
+
+    # display errors first
+    if [[ -v IMAGES_ERRORS_MAP[$image] ]]; then
+        local errors="${IMAGES_ERRORS_MAP[$image]}"
+
+        while IFS= read -r message; do
+            echo -ne "$prefix${COLOR_ERROR}${BOLD}🛇 ${COLOR_RESET}${COLOR_ERROR}"
+            printf "%-*s" "$indent_width" "$message"
+            echo -e "${COLOR_RESET}│"
+        done <<< "$errors"
+    fi
+
+    # then warnings
+    if [[ -v IMAGES_WARNINGS_MAP[$image] ]]; then
+        local warnings="${IMAGES_WARNINGS_MAP[$image]}"
+
+        while IFS= read -r message; do
+            echo -ne "$prefix${COLOR_WARN}${BOLD}❗${COLOR_RESET}${COLOR_WARN}"
+            printf "%-*s" "$indent_width" "$message"
+            echo -e "${COLOR_RESET}│"
+        done <<< "$warnings"
+    fi
+
+    # then infos
+    if [[ -v IMAGES_INFO_MAP[$image] ]]; then
+        local infos="${IMAGES_INFO_MAP[$image]}"
+
+        while IFS= read -r message; do
+            echo -ne "$prefix${COLOR_INFO_BULLET}${BOLD}✅${COLOR_RESET}${COLOR_INFO_BULLET}"
+            printf "%-*s" "$indent_width" "$message"
+            echo -e "${COLOR_RESET}│"
+        done <<< "$infos"
+    fi
+}
 
 #
 # Prints summary statistics and repository infos.
@@ -560,53 +609,6 @@ function print_summary() {
     echo -e "  • $UPDATE_PATCH:   ${COLOR_UPDATE_PATCH}${patch_updates}${COLOR_RESET}"
     echo -e "  • $UPDATE_SPECIAL: ${COLOR_UPDATE_SPECIAL}${special_updates}${COLOR_RESET}"
     echo
-
-    # Get all unique images that have errors, warnings, or infos. Can't just join the 3 arrays with a '\n - empty arrays
-    # would result in an empty string and therefore empty item.
-    declare -a all_images
-    mapfile -t all_images < <({
-        [[ ${#IMAGES_ERRORS_MAP[@]} -gt 0 ]] && printf '%s\n' "${!IMAGES_ERRORS_MAP[@]}"
-        [[ ${#IMAGES_WARNINGS_MAP[@]} -gt 0 ]] && printf '%s\n' "${!IMAGES_WARNINGS_MAP[@]}"
-        [[ ${#IMAGES_INFO_MAP[@]} -gt 0 ]] && printf '%s\n' "${!IMAGES_INFO_MAP[@]}"
-    } | sort -u)
-
-    # for each image, first print its errors, then warnings, then infos
-    if [[ ${#all_images[@]} -gt 0 ]]; then
-        echo -e "${BOLD}Notes:${COLOR_RESET}"
-
-        for image in "${all_images[@]}"; do
-            echo -e "  • ${BOLD}$image${COLOR_RESET}"
-            
-            # display errors first
-            if [[ -v IMAGES_ERRORS_MAP[$image] ]]; then
-                local errors="${IMAGES_ERRORS_MAP[$image]}"
-
-                while IFS= read -r error; do
-                    echo -e "    ${COLOR_ERROR}${BOLD}🛇 ${COLOR_RESET}$error"
-                done <<< "$errors"
-            fi
-            
-            # then warnings
-            if [[ -v IMAGES_WARNINGS_MAP[$image] ]]; then
-                local warnings="${IMAGES_WARNINGS_MAP[$image]}"
-
-                while IFS= read -r warning; do
-                    echo -e "    ${COLOR_WARN}${BOLD}❗${COLOR_RESET}$warning"
-                done <<< "$warnings"
-            fi
-            
-            # then infos
-            if [[ -v IMAGES_INFO_MAP[$image] ]]; then
-                local infos="${IMAGES_INFO_MAP[$image]}"
-
-                while IFS= read -r note; do
-                      echo -e "    ${COLOR_INFO_BULLET}${BOLD}✅${COLOR_RESET}$note"
-                done <<< "$infos"
-            fi
-            
-            echo
-        done
-    fi
 }
 
 #
