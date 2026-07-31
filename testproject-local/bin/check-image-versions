@@ -562,7 +562,7 @@ function fetch_latest_docker_image_tag() {
 #
 # @param $1   prefix string (e.g., "│    │   ")
 # @param $2   max. message width (for left-alignment)
-# @param $3   color code
+# @param $3   color code (ANSI sequence)
 # @param $4   icon
 # @param $5   messages (newline-separated)
 #
@@ -573,54 +573,61 @@ function print_notes_with_color() {
     local -r icon=${4?Missing icon}
     local -r messages=${5?Missing messages}
 
-    local -ri max_width_for_2_borders=$((max_width - COL_UPDATE_WIDTH - 3))
-    local -ri max_width_for_3_borders=$((max_width_for_2_borders - COL_LATEST_WIDTH - 3))
-    local -ri max_width_for_4_borders=$((max_width_for_2_borders - COL_LATEST_WIDTH - 3 - COL_LOCAL_WIDTH - 3))
-    #echo "max_width_for_2_borders=$max_width_for_2_borders; max_width_for_3_borders=$max_width_for_3_borders; max_width_for_4_borders=$max_width_for_4_borders"
-    # arguments to prints: max. width (for alignment), text
-    local -r aligned_text="%-*s"
+    # Calculate available width in the image column for the message.
+    # The prefix is "│    │   " and the icon follows immediately after.
+    local -i icon_visual_width=${#icon}
+    ((icon_visual_width++))
+    # special extra-wide icon
+    if [[ "$icon" =~ "❗" ]]; then
+        ((icon_visual_width++))
+    fi
 
     while IFS= read -r message; do
         echo -ne "${prefix}${color}${BOLD}${icon}${COLOR_RESET}${NOTE_COLOR}"
-
-        # test cases:
-        # no border
-#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-        # 1 border
-#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-        # 2 borders
-#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-        # 3 borders
-#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-        # 4 borders
-#        message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-
-        # print: message | empty column | empty column | empty column |
-        if [ "${#message}" -le $max_width_for_4_borders ]; then
-            printf "${aligned_text}${COLOR_RESET}%s${aligned_text}%s${aligned_text}%s${aligned_text}%s\n" \
-                "$max_width_for_4_borders" "$message" "${V_BORDER}" \
-                "$((COL_LOCAL_WIDTH + 2))"  ""        "${V_BORDER}" \
-                "$((COL_LATEST_WIDTH + 2))" ""        "${V_BORDER}" \
-                "$((COL_UPDATE_WIDTH + 2))" ""        "${V_BORDER}"
-        # print: message | empty column | empty column |
-        elif [ "${#message}" -le $max_width_for_3_borders ]; then
-            printf "${aligned_text}${COLOR_RESET}%s${aligned_text}%s${aligned_text}%s\n" \
-                "$max_width_for_3_borders" "$message" "${V_BORDER}" \
-                "$((COL_LATEST_WIDTH + 2))" ""        "${V_BORDER}" \
-                "$((COL_UPDATE_WIDTH + 2))" ""        "${V_BORDER}"
-        # print: message | empty column |
-        elif [ "${#message}" -le $max_width_for_2_borders ]; then
-            printf "${aligned_text}${COLOR_RESET}%s${aligned_text}%s\n" \
-                "$max_width_for_2_borders" "$message" "${V_BORDER}" \
-                "$((COL_UPDATE_WIDTH + 2))" ""        "${V_BORDER}"
-        # print: message |
-        elif [ "${#message}" -le $max_width ]; then
-            printf "${aligned_text}${COLOR_RESET}%s\n" "$max_width" "$message" "${V_BORDER}"
-        # print: message (no border because the message is too long)
-        else
-            echo -e "${message}${COLOR_RESET}"
-        fi
+        print_raw_note "$icon_visual_width" "$message"
+        echo -e "${COLOR_RESET}"
     done <<< "$messages"
+}
+
+#
+# Prints a single message content with table borders (those not overlapped by the message).
+#
+# @param $1   icon visual width (calculated)
+# @param $2   message to print
+#
+function print_raw_note() {
+    local -ri icon_visual_width=${1?Missing prefix_with_icon_width}
+    local -r message=${2?Missing message}
+
+    # test cases:
+    # no border
+    #message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    # 1 border
+    #message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    # 2 borders
+    #message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    # 3 borders
+    #message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    # 4 borders
+    #message=aaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+    # Step #1: create empty table row template with all (empty) columns and borders.
+    # Template structure: message area + borders and empty columns.
+    local -r empty_row_template=$(printf '%*s%s%*s%s%*s%s%*s%s\n' \
+        "$((COL_IMAGE_WIDTH - icon_visual_width))" "" \
+        "$V_BORDER" \
+        "$((COL_LOCAL_WIDTH + 2))" "" \
+        "$V_BORDER" \
+        "$((COL_LATEST_WIDTH + 2))" "" \
+        "$V_BORDER" \
+        "$((COL_UPDATE_WIDTH + 2))" "" \
+        "$V_BORDER")
+
+    # Step #2: place message over the template by overwriting characters.
+    # The template starts from where the message area begins (after the icon).
+    local -r remaining_template="${empty_row_template:${#message}}"
+    # Step #3: interpret ANSI sequences.
+    echo -ne "${message}${remaining_template}"
 }
 
 #

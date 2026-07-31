@@ -20,7 +20,7 @@ ALL_COMPOSE_PROFILES=postgres,mongodb,redis,kafka,keycloak
 # TAG: https://hub.docker.com/r/timescale/timescaledb-ha/tags
 # WARNING: new versions are not discovered due to complex format, please check them manually
 # INFO: keep version number in sync with TestContainers
-POSTGRES_IMAGE_VERSION=pg18.4-ts2.28.2
+POSTGRES_IMAGE_VERSION=pg18.4-ts2.29.0
 
 # inside Docker
 SQL_HOST=postgres
@@ -42,10 +42,10 @@ SQL_VAULT_TABLE=vault_kv_store
 #############################################################################
 
 # TAG: https://hub.docker.com/_/mongo/tags
-# ERROR: crashes under Linux kernel 6.19+, 7.x (https://jira.mongodb.org/browse/SERVER-125742)
+# ERROR: before 8.3.9 crashes in Linux 6.19+ (https://jira.mongodb.org/browse/SERVER-125742)
 # INFO: the license is SSPL (AGPLv3 with amendments for cloud providers)
 # INFO: keep version number in sync with TestContainers
-MONGO_IMAGE_VERSION=8.3.4
+MONGO_IMAGE_VERSION=8.3.7
 
 MONGO_REPLICASET_NAME=rs0
 # must be on a volume
@@ -63,7 +63,7 @@ MONGODB_PASSWORD=${DEFAULT_PASSWORD}
 # TAG: https://hub.docker.com/_/redis/tags
 # INFO: starting with v8.0, the license reverted to AGPLv3
 # INFO: keep version number in sync with TestContainers
-REDIS_IMAGE_VERSION=8.8.0-alpine
+REDIS_IMAGE_VERSION=8.10.0-alpine
 
 REDIS_HOST=redis
 REDIS_PORT=6379
