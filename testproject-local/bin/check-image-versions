@@ -16,6 +16,8 @@ set -e
 # exits on non-existing file thanks to '-e'
 . "$DIR/../../lib/functions.bash"
 . "$DIR/../../lib/version-functions.bash"
+# auto-run unit tests
+. "$DIR/../../lib/version-functions-tests.bash"
 set +e
 
 #############################################################################
@@ -252,6 +254,9 @@ function collect_docker_images() {
 #   "1.2.3" ""                → 0 (true)
 #   "v1.2.3-alpine" "-alpine" → 0 (true)
 #   "2.8-jre17" "-jre17"      → 0 (true)
+#   "pg18.4-ts2.29.0" ""      → 0 (true)
+#   "pg18.4-ts2.29.0-all-oss" "all-oss" → 0 (true)
+#   "pg18.4-ts2.29.0-all-oss" ""        → 1 (false, suffix mismatch)
 #   "nightly" ""              → 1 (false, suffix mismatch)
 #   "latest" ""               → 1 (false, suffix mismatch)
 #   "1.2.3-alpine" ""         → 1 (false, suffix mismatch)
@@ -307,8 +312,23 @@ function is_comparable_version() {
         return 0
     fi
     
+    # check for TimescaleDB format pg<PgVersion>-ts<TsVersion> with an optional suffix
+    # (e.g. pg18.4-ts2.29.0 or pg17.10-ts2.28.2-all-oss): the PG and TS version parts are
+    # compared (PG first, then TS) and never exact-matched, so candidates with a different
+    # PG version are still comparable
+    if [[ "$check_version" =~ ^pg[0-9]+(\.[0-9]+)*-ts[0-9]+(\.[0-9]+)*(-(.+))?$ ]]; then
+        local -r tsdb_candidate_suffix="${BASH_REMATCH[4]}"
+
+        # suffixes must match exactly so that variants like '-oss' and '-all-oss' don't get mixed up
+        if [[ "$tsdb_candidate_suffix" == "$current_suffix" ]]; then
+            return 0
+        fi
+
+        return 1
+    fi
+    
     # Check for semantic version patterns (must start with number).
-    # Matches: 1.2.3, 1.2.3-alpine, 2.8-jre17, pg17.10-ts2.28.2-all-oss.
+    # Matches: 1.2.3, 1.2.3-alpine, 2.8-jre17.
     if [[ "$check_version" =~ ^[0-9] ]]; then
         # must contain at least one digit and valid characters
         if [[ "$check_version" =~ ^[0-9]+(\.[0-9]+)*([a-zA-Z0-9\.\-]*)?$ ]]; then
@@ -693,6 +713,12 @@ function print_summary() {
 # Prints formatted table and summary statistics.
 #
 function main() {
+    # run unit tests first - a broken version parser must never produce misleading version tables
+    if ! run_version_function_tests; then
+        log_error "Version function unit tests failed"
+        exit 1
+    fi
+
     # exits if .env is missing
     load_env_file
 

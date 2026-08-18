@@ -18,7 +18,6 @@ ALL_COMPOSE_PROFILES=postgres,mongodb,redis,kafka,keycloak
 # each xx_VERSION variable is prefixed with '#TAG: image_url' and optional multiple '# INFO/WARNING/ERROR: message'
 
 # TAG: https://hub.docker.com/r/timescale/timescaledb-ha/tags
-# WARNING: new versions are not discovered due to complex format, please check them manually
 # INFO: keep version number in sync with TestContainers
 POSTGRES_IMAGE_VERSION=pg18.4-ts2.29.1
 

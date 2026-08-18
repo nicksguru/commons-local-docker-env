@@ -7,11 +7,23 @@
 #   "1.2.3-456-7"   →  "456-7"
 #   "v1.2.3-alpine" →  "alpine"
 #
+# TimescaleDB tags are handled specially because their first hyphen separates the PostgreSQL and
+# TimescaleDB version parts rather than the suffix:
+#   "pg18.4-ts2.29.0"          →  ""
+#   "pg18.4-ts2.29.0-all-oss"  →  "all-oss"
+#
 # @param $1   version string to extract suffix from
-# @return     suffix with leading hyphen, or empty string if no suffix
+# @return     suffix without leading hyphen, or empty string if no suffix
 #
 function extract_version_suffix() {
     local -r version=${1?Missing version}
+
+    # TimescaleDB format pg<PgVersion>-ts<TsVersion>: both the PG and TS versions take part in
+    # comparison (PG first, then TS), so the suffix is only what follows the TS version
+    if [[ "$version" =~ ^pg[0-9]+(\.[0-9]+)*-ts[0-9]+(\.[0-9]+)*(-(.+))?$ ]]; then
+        echo "${BASH_REMATCH[4]}"
+        return
+    fi
 
     # extract suffix after FIRST hyphen ('##' would match LAST hyphen)
     if [[ "$version" =~ - ]]; then
@@ -26,6 +38,7 @@ function extract_version_suffix() {
 # Checks if a suffix is an Ubuntu codename.
 # Example:
 #   "noble"  → 0 (true)
+#   "trixie" → 0 (true)
 #   "jammy"  → 0 (true)
 #   "alpine" → 1 (false)
 #   "jre17"  → 1 (false)
@@ -38,8 +51,8 @@ function is_ubuntu_codename() {
     # remove leading hyphen for checking
     local -r check_suffix="${suffix#-}"
 
-    # common Ubuntu codenames
-    local codenames="noble|jammy|focal|bionic|xenial|trusty|precise|oneiric|natty|maverick|lucid|karmic|jaunty|intrepid|hardy|gutsy|feisty|edgy|dapper|breezy|warty"
+    # common Ubuntu codenames plus Debian 'trixie' (also used as an image tag suffix)
+    local codenames="noble|trixie|jammy|focal|bionic|xenial|trusty|precise|oneiric|natty|maverick|lucid|karmic|jaunty|intrepid|hardy|gutsy|feisty|edgy|dapper|breezy|warty"
 
     if [[ "$check_suffix" =~ ^($codenames)$ ]]; then
         return 0
@@ -66,9 +79,9 @@ function extract_version_components() {
     local -r version=${1?Missing version}
     local -r normalized=$(normalize_version_for_comparison "$version")
 
-    # handle special cases like pg18.3-ts2.26.4
-    if [[ $normalized =~ ^pg([0-9]+\.[0-9]+)\-ts([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-        echo "timescaledb:${BASH_REMATCH[1]}:${BASH_REMATCH[2]}"
+    # handle special cases like pg18.3-ts2.26.4 (component counts may vary, e.g. pg18-ts2.29.0)
+    if [[ $normalized =~ ^pg([0-9]+(\.[0-9]+)*)-ts([0-9]+(\.[0-9]+)*) ]]; then
+        echo "timescaledb:${BASH_REMATCH[1]}:${BASH_REMATCH[3]}"
         return
     fi
 
@@ -119,10 +132,11 @@ function compare_semver() {
         return 0
     fi
 
-    # split by dots and compare each component
+    # split by dots and compare each component (quoted assignment would NOT split, so use 'read')
+    local -a parts1 parts2
     local IFS='.'
-    local -r parts1=("$v1")
-    local -r parts2=("$v2")
+    read -r -a parts1 <<< "$v1"
+    read -r -a parts2 <<< "$v2"
 
     # get the maximum length
     local max_len=${#parts1[@]}
@@ -148,6 +162,65 @@ function compare_semver() {
     done
 
     return 0
+}
+
+#
+# Classifies the update type between two dot-separated numeric versions by the position of the
+# first differing component: first component → "major", second → "minor", any later → "patch".
+# A downgrade or equal versions yield "none".
+# Example:
+#   "18.4"   "19.0"   → "major"
+#   "18.4"   "18.5"   → "minor"
+#   "2.29.0" "2.29.1" → "patch"
+#   "2.29.0" "2.29.0" → "none"
+#   "2.29.1" "2.29.0" → "none" (downgrade)
+#
+# @param $1   current version components (dot-separated)
+# @param $2   latest version components (dot-separated)
+# @return     update type: "major", "minor", "patch", or "none" (equal or downgrade)
+#
+function classify_component_update() {
+    local -r current=${1?Missing current}
+    local -r latest=${2?Missing latest}
+
+    # split into component arrays ('.' as delimiter)
+    local -a current_parts latest_parts
+    local IFS='.'
+    read -r -a current_parts <<< "$current"
+    read -r -a latest_parts <<< "$latest"
+
+    # the longer component list wins if one is a prefix of the other (e.g. "18" vs "18.4")
+    local -i max_len=${#current_parts[@]}
+    if [[ ${#latest_parts[@]} -gt $max_len ]]; then
+        max_len=${#latest_parts[@]}
+    fi
+
+    # find the first differing component - its position determines the update type
+    local -i i
+    for ((i=0; i<max_len; i++)); do
+        # missing components count as zero
+        local p1=${current_parts[$i]:-0}
+        local p2=${latest_parts[$i]:-0}
+
+        # remove leading zeros for numeric comparison
+        p1=$((10#$p1))
+        p2=$((10#$p2))
+
+        if [[ $p2 -gt $p1 ]]; then
+            case $i in
+                0) echo "major" ;;
+                1) echo "minor" ;;
+                *) echo "patch" ;;
+            esac
+            return
+        elif [[ $p2 -lt $p1 ]]; then
+            # downgrade
+            echo "none"
+            return
+        fi
+    done
+
+    echo "none"
 }
 
 #
@@ -218,28 +291,41 @@ function detect_version_update() {
             fi
             ;;
 
-        # Docker image (PosgreSQL + TimescaleDB extension), format: pg1.2.3-ts4.5.6
+        # Docker image (PostgreSQL + TimescaleDB extension), format: pg<PgVersion>-ts<TsVersion>.
+        # Both parts are compared - the PostgreSQL part first, the TimescaleDB part only when the
+        # PG parts are equal (different PG versions like 17 and 18 bundle the same TS version):
+        # - pg major bump → "major", pg minor bump → "minor", pg patch bump → "patch"
+        # - pg downgrade → "none" (a ts bump cannot offset an older pg part)
+        # - if pg is unchanged, a ts major/minor bump → "minor", a ts patch bump → "patch"
         "timescaledb")
             local -r current_pg=$(echo "$current_parts" | cut -d: -f2)
             local -r current_ts=$(echo "$current_parts" | cut -d: -f3)
             local -r latest_pg=$(echo "$latest_parts" | cut -d: -f2)
             local -r latest_ts=$(echo "$latest_parts" | cut -d: -f3)
 
-            # check Postgres version
-            compare_semver "$latest_pg" "$current_pg"
-            local pg_cmp=$?
-
-            # check Timescale version
-            compare_semver "$latest_ts" "$current_ts"
-            local ts_cmp=$?
-
+            # PostgreSQL part orders first - a pg bump classifies the update by itself
+            local -i pg_cmp=0
+            compare_semver "$latest_pg" "$current_pg" || pg_cmp=$?
             if [[ $pg_cmp -eq 1 ]]; then
-                echo "major"
-            elif [[ $pg_cmp -eq 0 && $ts_cmp -eq 1 ]]; then
-                echo "minor"
-            else
-                echo "none"
+                local pg_update
+                pg_update=$(classify_component_update "$current_pg" "$latest_pg")
+                echo "$pg_update"
+                return
             fi
+
+            # pg downgrade - the ts part cannot offset an older pg part
+            if [[ $pg_cmp -eq 2 ]]; then
+                echo "none"
+                return
+            fi
+
+            # PostgreSQL unchanged - classify by the TimescaleDB extension part
+            local ts_update
+            ts_update=$(classify_component_update "$current_ts" "$latest_ts")
+            case "$ts_update" in
+                "major" | "minor") echo "minor" ;;
+                *)                 echo "$ts_update" ;;
+            esac
             ;;
 
         "date")
