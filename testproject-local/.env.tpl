@@ -19,7 +19,7 @@ ALL_COMPOSE_PROFILES=postgres,mongodb,redis,kafka,keycloak
 
 # TAG: https://hub.docker.com/r/timescale/timescaledb-ha/tags
 # INFO: keep version number in sync with TestContainers
-POSTGRES_IMAGE_VERSION=pg18.4-ts2.29.1
+POSTGRES_IMAGE_VERSION=pg18.4-ts2.29.2
 
 # inside Docker
 SQL_HOST=postgres
@@ -62,7 +62,7 @@ MONGODB_PASSWORD=${DEFAULT_PASSWORD}
 # TAG: https://hub.docker.com/_/redis/tags
 # INFO: starting with v8.0, the license reverted to AGPLv3
 # INFO: keep version number in sync with TestContainers
-REDIS_IMAGE_VERSION=8.10.0-alpine
+REDIS_IMAGE_VERSION=8.10.1-alpine
 
 REDIS_HOST=redis
 REDIS_PORT=6379
