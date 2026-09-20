@@ -19,7 +19,7 @@ ALL_COMPOSE_PROFILES=postgres,mongodb,redis,kafka,keycloak
 
 # TAG: https://hub.docker.com/r/timescale/timescaledb-ha/tags
 # INFO: keep version number in sync with TestContainers
-POSTGRES_IMAGE_VERSION=pg18.4-ts2.29.2
+POSTGRES_IMAGE_VERSION=pg18.6-ts2.30.1
 
 # inside Docker
 SQL_HOST=postgres
@@ -44,7 +44,7 @@ SQL_VAULT_TABLE=vault_kv_store
 # ERROR: before 8.3.9 crashes in Linux 6.19+ (https://jira.mongodb.org/browse/SERVER-125742)
 # INFO: the license is SSPL (AGPLv3 with amendments for cloud providers)
 # INFO: keep version number in sync with TestContainers
-MONGO_IMAGE_VERSION=8.3.8
+MONGO_IMAGE_VERSION=8.3.11
 
 MONGO_REPLICASET_NAME=rs0
 # must be on a volume
@@ -76,7 +76,7 @@ REDIS_PERSISTENCE=yes
 AKHQ_IMAGE_VERSION=0.28.0
 
 # TAG: https://hub.docker.com/r/confluentinc/cp-kafka/tags
-KAFKA_IMAGE_VERSION=8.3.1
+KAFKA_IMAGE_VERSION=8.3.2
 
 # let subscribers create topics
 KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
@@ -115,6 +115,6 @@ KAFKA1_CONTROLLER_PORT=9292
 #############################################################################
 
 # TAG: https://hub.docker.com/r/keycloak/keycloak/tags
-KEYCLOAK_IMAGE_VERSION=26.7.1-0
+KEYCLOAK_IMAGE_VERSION=26.7.4-0
 KEYCLOAK_ADMIN=${DEFAULT_USERNAME}
 KEYCLOAK_ADMIN_PASSWORD=${DEFAULT_PASSWORD}
