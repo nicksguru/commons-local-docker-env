@@ -41,9 +41,8 @@ SQL_VAULT_TABLE=vault_kv_store
 #############################################################################
 
 # TAG: https://hub.docker.com/_/mongo/tags
-# ERROR: before 8.3.9 crashes in Linux 6.19+ (https://jira.mongodb.org/browse/SERVER-125742)
+# WARNING: crashes on Linux kernels 6.19-7.0.13 (https://jira.mongodb.org/browse/SERVER-125742)
 # INFO: the license is SSPL (AGPLv3 with amendments for cloud providers)
-# INFO: keep version number in sync with TestContainers
 MONGO_IMAGE_VERSION=8.3.11
 
 MONGO_REPLICASET_NAME=rs0
