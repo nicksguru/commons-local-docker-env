@@ -19,7 +19,7 @@ ALL_COMPOSE_PROFILES=postgres,mongodb,redis,kafka,keycloak
 
 # TAG: https://hub.docker.com/r/timescale/timescaledb-ha/tags
 # INFO: keep version number in sync with TestContainers
-POSTGRES_IMAGE_VERSION=pg18.6-ts2.30.1
+POSTGRES_IMAGE_VERSION=pg18.6-ts2.30.2
 
 # inside Docker
 SQL_HOST=postgres
@@ -43,7 +43,7 @@ SQL_VAULT_TABLE=vault_kv_store
 # TAG: https://hub.docker.com/_/mongo/tags
 # WARNING: crashes on Linux kernels 6.19-7.0.13 (https://jira.mongodb.org/browse/SERVER-125742)
 # INFO: the license is SSPL (AGPLv3 with amendments for cloud providers)
-MONGO_IMAGE_VERSION=8.3.11
+MONGO_IMAGE_VERSION=9.0.2
 
 MONGO_REPLICASET_NAME=rs0
 # must be on a volume
@@ -61,7 +61,7 @@ MONGODB_PASSWORD=${DEFAULT_PASSWORD}
 # TAG: https://hub.docker.com/_/redis/tags
 # INFO: starting with v8.0, the license reverted to AGPLv3
 # INFO: keep version number in sync with TestContainers
-REDIS_IMAGE_VERSION=8.10.1-alpine
+REDIS_IMAGE_VERSION=8.10.2-alpine
 
 REDIS_HOST=redis
 REDIS_PORT=6379
@@ -114,6 +114,6 @@ KAFKA1_CONTROLLER_PORT=9292
 #############################################################################
 
 # TAG: https://hub.docker.com/r/keycloak/keycloak/tags
-KEYCLOAK_IMAGE_VERSION=26.7.4-0
+KEYCLOAK_IMAGE_VERSION=26.8.0-0
 KEYCLOAK_ADMIN=${DEFAULT_USERNAME}
 KEYCLOAK_ADMIN_PASSWORD=${DEFAULT_PASSWORD}
