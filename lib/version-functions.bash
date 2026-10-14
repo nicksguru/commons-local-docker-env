@@ -378,3 +378,63 @@ function normalize_version_for_comparison() {
 
     echo "$version"
 }
+
+#
+# Finds the start index in 'new' from which it differs from 'old': the first differing character,
+# extended backwards to include the full numeric run containing it (multi-digit numbers are never
+# split, so the highlight does not render a partial number). Used to highlight the changed part
+# of the latest version.
+# Example:
+#   "1.2.1"   "1.3.0"        → 2   (highlights "3.0")
+#   "16.4"    "17.0"         → 0   (highlights "17.0", not "7.0")
+#   "2.29.0"  "2.30.0"       → 2   (highlights "30.0")
+#   "2.29.0"  "2.29.1"       → 5   (highlights "1")
+#   "144"     "145"          → 0   (a single number is one numeric run)
+#   "1.2.3"   "1.2.3.4"      → 5   (highlights ".4" - the inserted '.' is not a digit, so no back-up)
+#   "1.2.3"   "1.2.3"        → -1  (no difference)
+#   "1.2.3.4" "1.2.3"        → -1  (nothing added)
+#
+# @param $1   old version string
+# @param $2   new version string
+# @return     start index in $2 from which the strings differ, or -1 if there is nothing to highlight
+#
+function find_version_diff_start() {
+    local -r old=${1?Missing old version}
+    local -r new=${2?Missing new version}
+
+    # identical strings - nothing to highlight
+    if [[ "$old" == "$new" ]]; then
+        echo "-1"
+        return
+    fi
+
+    # find the first differing character
+    local -i common_len=0
+    local -i max_common=$((${#old} < ${#new} ? ${#old} : ${#new}))
+
+    while ((common_len < max_common)); do
+        if [[ "${old:common_len:1}" != "${new:common_len:1}" ]]; then
+            break
+        fi
+
+        common_len=$((common_len + 1))
+    done
+
+    # nothing was added to 'new' - nothing to highlight
+    if ((common_len >= ${#new})); then
+        echo "-1"
+        return
+    fi
+
+    # extend backwards over the numeric run containing the first differing character
+    # (only when the differing character itself is a digit)
+    local -i start=$common_len
+
+    if [[ "${new:start:1}" =~ [0-9] ]]; then
+        while ((start > 0)) && [[ "${new:start-1:1}" =~ [0-9] ]]; do
+            start=$((start - 1))
+        done
+    fi
+
+    echo "$start"
+}

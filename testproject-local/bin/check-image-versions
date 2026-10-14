@@ -29,6 +29,8 @@ readonly V_BORDER="│"
 
 # Update types. For no update_label, print nothing - to reduce visual noise.
 # For the same reason, use the same style for all update_label types (currently bold).
+# The update type and the changed part of the latest version (see find_version_diff_start)
+# are additionally highlighted with COLOR_VERSION_DIFF.
 readonly UPDATE_NONE_LABEL=""
 readonly UPDATE_NONE_COLOR=""
 #
@@ -492,13 +494,42 @@ function print_table_row() {
     local -r truncated_latest="${latest:0:$COL_LATEST_WIDTH}"
     local -r truncated_update="${update_label:0:$COL_UPDATE_WIDTH}"
 
+    # highlight the changed part of the latest version (only for actual updates)
+    local -i diff_start=-1
+    if [[ "$update_type" != "none" ]]; then
+        diff_start=$(find_version_diff_start "$current" "$latest")
+    fi
+
+    local latest_prefix="${truncated_latest}"
+    local latest_diff=""
+    if ((diff_start >= 0 && diff_start < COL_LATEST_WIDTH)); then
+        latest_prefix="${truncated_latest:0:$diff_start}"
+        latest_diff="${truncated_latest:diff_start}"
+    fi
+
+    # trailing padding keeps the column aligned despite the embedded ANSI sequences
+    local -i latest_pad=$((COL_LATEST_WIDTH - ${#latest_prefix} - ${#latest_diff}))
+
+    # the update type and the version diff share the same highlight style;
+    # COLOR_VERSION_DIFF starts with an SGR reset, so bold must come after it
+    local update_style="" # Update column label - every updated row
+    local diff_style=""   # latest version diff - only when the diff is visible
+    if [[ "$update_type" != "none" ]]; then
+        update_style="${COLOR_VERSION_DIFF}${BOLD}"
+        if [[ -n "$latest_diff" ]]; then
+            diff_style="$update_style"
+        fi
+    fi
+
     # row number is right-aligned
-    printf "│ ${update_color}%*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s\n" \
-        "$COL_NUM_WIDTH" "$row_num"             "$V_BORDER" \
-        "$COL_IMAGE_WIDTH" "$truncated_image"   "$V_BORDER" \
-        "$COL_LOCAL_WIDTH" "$truncated_current" "$V_BORDER" \
-        "$COL_LATEST_WIDTH" "$truncated_latest" "$V_BORDER" \
-        "$COL_UPDATE_WIDTH" "$truncated_update" "$V_BORDER"
+    # the latest column is printed as prefix + highlighted diff + padding (never through a
+    # width-padded %-spec, which would count the ANSI escape bytes and misalign the table)
+    printf "│ ${update_color}%*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s ${update_color}%-*s${COLOR_RESET} %s ${update_color}%s${diff_style}%s${COLOR_RESET}%*s %s ${update_color}${update_style}%-*s${COLOR_RESET} %s\n" \
+        "$COL_NUM_WIDTH"    "$row_num"           "$V_BORDER" \
+        "$COL_IMAGE_WIDTH"  "$truncated_image"   "$V_BORDER" \
+        "$COL_LOCAL_WIDTH"  "$truncated_current" "$V_BORDER" \
+        "$latest_prefix"    "$latest_diff"       "$latest_pad" "" "$V_BORDER" \
+        "$COL_UPDATE_WIDTH" "$truncated_update"  "$V_BORDER"
 
     print_image_notes "$image"
 }

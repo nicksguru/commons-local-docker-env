@@ -7,11 +7,12 @@ if [[ -t 1 && -t 2 ]]; then
     #   0;   = style 0 (normal/bold off)
     #   31   = foreground color (red)
     #   m    = end of sequence
-    readonly COLOR_RESET='\033[0m'      # reset all attributes to default
-    readonly COLOR_ERROR='\033[0;31m'   # red
-    readonly COLOR_WARN='\033[0;33m'    # yellow
-    readonly COLOR_INFO='\033[0;32m'    # green
-    readonly COLOR_DEBUG='\033[0;36m'   # cyan
+    readonly COLOR_RESET='\033[0m'           # reset all attributes to default
+    readonly COLOR_ERROR='\033[0;31m'        # red
+    readonly COLOR_WARN='\033[0;33m'         # yellow
+    readonly COLOR_INFO='\033[0;32m'         # green
+    readonly COLOR_DEBUG='\033[0;36m'        # cyan
+    readonly COLOR_VERSION_DIFF='\033[0;31m' # red
     readonly BOLD='\033[1m'
 # when not in a terminal, each color code becomes a no-op, so messages become plain text
 else
@@ -21,6 +22,7 @@ else
     readonly COLOR_WARN=''
     readonly COLOR_INFO=''
     readonly COLOR_DEBUG=''
+    readonly COLOR_VERSION_DIFF=''
     readonly BOLD=''
 fi
 
@@ -36,7 +38,7 @@ function log_raw() {
 function log_error() { log_raw "${COLOR_ERROR}[ERROR]${COLOR_RESET} $*"; }
 function log_warn()  { log_raw "${COLOR_WARN}[WARN ]${COLOR_RESET} $*";  }
 function log_info()  { log_raw "${COLOR_INFO}[INFO ]${COLOR_RESET} $*";  }
-function log_debug() { log_raw "${COLOR_DEBUG}[DEBUG]${COLOR_RESET}$*";  }
+function log_debug() { log_raw "${COLOR_DEBUG}[DEBUG]${COLOR_RESET} $*";  }
 
 #
 # Loads environment variables from '.env' file in the parent directory.

@@ -7,7 +7,7 @@
 #
 # Covers lib/version-functions.bash (extract_version_suffix, is_ubuntu_codename,
 # normalize_version_for_comparison, extract_version_components, compare_semver,
-# classify_component_update, detect_version_update) and the script's own
+# classify_component_update, detect_version_update, find_version_diff_start) and the script's own
 # is_comparable_version (bash resolves function calls at call time, so the
 # script's definition is available by the time the suite runs).
 #
@@ -141,6 +141,23 @@ function assert_comparable() {
 }
 
 #
+# Asserts find_version_diff_start's verdict for an old/new version pair.
+#
+# @param $1   old version
+# @param $2   new version
+# @param $3   expected start index of the difference in $2, or "-1" for no highlight
+# @return     nothing (records pass/fail)
+#
+function assert_diff_start() {
+    local -r old=${1?Missing old}
+    local -r new=${2?Missing new}
+    local -r expected=${3?Missing expected}
+
+    local -r actual=$(find_version_diff_start "$old" "$new")
+    assert_equals "find_version_diff_start" "'$old' -> '$new'" "$expected" "$actual"
+}
+
+#
 # Runs the full unit-test suite for the version-comparison functions.
 #
 # Silent on success. On failure, prints every failing case to stderr (function,
@@ -245,6 +262,25 @@ function run_version_function_tests() {
     assert_equals "classify_component_update" "'2.29.0' vs '2.29.0'" "none" "$(classify_component_update "2.29.0" "2.29.0")"
     assert_equals "classify_component_update" "'2.29.1' vs '2.29.0'" "none" "$(classify_component_update "2.29.1" "2.29.0")"
     assert_equals "classify_component_update" "'2.0' vs '1.9'" "none" "$(classify_component_update "2.0" "1.9")"
+
+    #########################################################################
+    # find_version_diff_start
+    #########################################################################
+    assert_diff_start "1.2.1" "1.3.0" 2 # highlights "3.0"
+    assert_diff_start "16.4" "17.0" 0 # highlights "17.0", not "7.0"
+    assert_diff_start "12.1" "13.1" 0 # highlights "13.1", not "3.1"
+    assert_diff_start "2.29.0" "2.30.0" 2 # highlights "30.0"
+    assert_diff_start "2.9.0" "2.10.0" 2 # highlights "10.0"
+    assert_diff_start "2.29.0" "2.29.1" 5 # highlights "1"
+    assert_diff_start "144" "145" 0 # numeric versions: a single number is one numeric run
+    assert_diff_start "20260324" "20260325" 0 # date-based versions: same, the whole date is one run
+    assert_diff_start "8.0.1-noble" "8.0.2-trixie" 4 # suffix change included
+    assert_diff_start "8.0.1-noble" "8.0.1-trixie" 6 # only the codename changed
+    assert_diff_start "pg17.10-ts2.28.2" "pg18.4-ts2.29.0" 2 # highlights "18.4-ts2.29.0"
+    assert_diff_start "pg18.4-ts2.29.0" "pg18.4.1-ts2.29.0" 6 # the inserted '.' is not a digit, so no backup
+    assert_diff_start "1.2.3" "1.2.3.4" 5 # appended component
+    assert_diff_start "1.2.3" "1.2.3" -1 # equal - nothing to highlight
+    assert_diff_start "1.2.3.4" "1.2.3" -1 # nothing added
 
     #########################################################################
     # detect_version_update - TimescaleDB pg/ts matrix
