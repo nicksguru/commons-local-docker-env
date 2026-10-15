@@ -81,47 +81,32 @@ readonly NOTE_COLOR='\033[0;38;5;242m'
 # Prints usage information.
 #
 function print_usage() {
-    echo "Usage: $0 [-j|--json] [-h|--help]]"
+    echo "Check DockerHub for newer versions of the Docker images listed in '$INPUT_FILE'" file.
     echo
-    echo "Checks DockerHub for newer versions of the Docker images listed in the given file."
-    echo "  -j, --json          print results as a JSON document (logs go to stderr)"
-    echo "  -h, --help          print this help and exit"
+    echo "Usage: $(basename "$0") [-j|--json] [-h|--help]"
+    echo "  -j, --json      print results as a JSON document (logs go to stderr)"
+    echo "  -h, --help      print this help and exit"
     echo
     echo "Sample JSON output:"
     cat <<EOF
 {
   "images": [
     {
-      "image": "test",
-      "variable": "TEST_IMAGE_VERSION",
-      "localVersion": "0.1.2",
-      "latestVersion": "0.1.3",
-      "updateType": "patch",
-      "fetchFailed": false,
-      "info": [
-        "info message 1",
-        "info message 2"
-      ],
-      "warnings": [
-        "warning message"
-      ],
-      "errors": []
+      "image":           "test",
+      "variable":        "TEST_IMAGE_VERSION",
+      "localVersion":    "0.1.2",
+      "latestVersion":   "0.1.3",
+      "updateType":      "patch",
+      "fetchFailed":     false,
+      "info":            ["info message 1", "info message 2"],
+      "warnings":        ["warning message"],
+      "errors":          []
     }
   ],
   "summary": {
-    "elapsedSeconds": 4,
-    "checkedImages": {
-      "total": 4,
-      "successful": 3,
-      "failed": 1
-    },
-    "imagesWithUpdates": {
-      "total": 3,
-      "major": 1,
-      "minor": 1,
-      "patch": 0,
-      "special": 1
-    }
+    "elapsedSeconds":    4,
+    "checkedImages":     {"total":4, "successful":3, "failed":1},
+    "imagesWithUpdates": {"total":3, "major":1, "minor":1, "patch":0, "special":1}
   }
 }
 EOF
