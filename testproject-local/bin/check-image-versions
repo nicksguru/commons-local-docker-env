@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # This script dynamically parses '.env' to extract Docker image information,
-# checks Docker Hub for the latest versions,
+# checks DockerHub for the latest versions,
 # and compares them with current ones.
 #
 # The image URLs are automatically discovered from '# TAG: url' comments in the file.
@@ -10,18 +10,28 @@
 # '# WARNING: message'  comments add warnings to the output.
 # '# ERROR: message'    comments add errors to the output.
 #
+# For the description of CLI arguments, such as how to output JSON, run with script with '-h'.
+#
 DIR="$(dirname "$0")"
 
 set -e
 # exits on non-existing file thanks to '-e'
 . "$DIR/../../lib/functions.bash"
 . "$DIR/../../lib/version-functions.bash"
+. "$DIR/../../lib/json-functions.bash"
 # auto-run unit tests
 . "$DIR/../../lib/version-functions-tests.bash"
 set +e
 
 #############################################################################
-readonly INPUT_FILE="$DIR/../.env"
+# file to parse - not configurable because all other scripts work with it too (via load_env_file)
+INPUT_FILE="$DIR/../.env"
+
+# when set to 1 by parse_args, results are printed as a JSON document on stdout
+JSON_OUTPUT=""
+
+# compact JSON objects (one per image), collected in JSON mode and assembled by emit_json_output
+declare -a IMAGE_ROWS_JSON
 
 readonly SLEEP_IF_TOO_MANY_REQUESTS=5s
 readonly SLEEP_BETWEEN_IMAGE_REQUESTS=0.3s
@@ -30,7 +40,7 @@ readonly V_BORDER="│"
 # Update types. For no update_label, print nothing - to reduce visual noise.
 # For the same reason, use the same style for all update_label types (currently bold).
 # The update type and the changed part of the latest version (see find_version_diff_start)
-# are additionally highlighted with COLOR_VERSION_DIFF.
+# are additionally highlighted with COLOR_HIGHLIGHT.
 readonly UPDATE_NONE_LABEL=""
 readonly UPDATE_NONE_COLOR=""
 #
@@ -66,6 +76,86 @@ COL_UPDATE_WIDTH=$(echo -n "$UPDATE_SPECIAL_LABEL" | wc -m)
 # grey (make notes dimmer than image metadata)
 readonly NOTE_COLOR='\033[0;38;5;242m'
 #############################################################################
+
+#
+# Prints usage information.
+#
+function print_usage() {
+    echo "Usage: $0 [-j|--json] [-h|--help]]"
+    echo
+    echo "Checks DockerHub for newer versions of the Docker images listed in the given file."
+    echo "  -j, --json          print results as a JSON document (logs go to stderr)"
+    echo "  -h, --help          print this help and exit"
+    echo
+    echo "Sample JSON output:"
+    cat <<EOF
+{
+  "images": [
+    {
+      "image": "test",
+      "variable": "TEST_IMAGE_VERSION",
+      "localVersion": "0.1.2",
+      "latestVersion": "0.1.3",
+      "updateType": "patch",
+      "fetchFailed": false,
+      "info": [
+        "info message 1",
+        "info message 2"
+      ],
+      "warnings": [
+        "warning message"
+      ],
+      "errors": [
+        "error message"
+      ]
+    }
+  ]
+}
+EOF
+}
+
+#
+# Parses CLI arguments using external 'getopt' (long options are not supported by builtin 'getopts').
+# Sets global JSON_OUTPUT to non-empty when '--json' is requested.
+#
+# @param $@   CLI arguments (as passed to the script)
+#
+function parse_args() {
+    local parsed
+    if ! parsed=$(getopt -o jh -l json,help -n "$0" -- "$@"); then
+        print_usage >&2
+        exit 1
+    fi
+
+    eval set -- "$parsed"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -j | --json)
+                JSON_OUTPUT=1
+                shift
+                ;;
+            -h | --help)
+                print_usage
+                exit 0
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                print_usage >&2
+                exit 1
+                ;;
+        esac
+    done
+
+    # positional arguments are not accepted
+    if [[ $# -gt 0 ]]; then
+        print_usage >&2
+        exit 1
+    fi
+}
 
 #
 # Parses input file and builds global associative arrays of Docker image tags and infos.
@@ -120,7 +210,7 @@ function parse_input_file() {
         # skip empty lines
         [[ -z "$line" ]] && continue
         
-        # check for TAG comment with Docker Hub URL
+        # check for TAG comment with DockerHub URL
         if [[ "$line" =~ ^#[[:space:]]*TAG:[[:space:]]*https://hub\.docker\.com/(.*)/tags[[:space:]]*$ ]]; then
             local url_path="${BASH_REMATCH[1]}"
             
@@ -452,7 +542,7 @@ function print_table_footer() {
 #
 # @param $1   Docker image name
 # @param $2   current version
-# @param $3   latest version from Docker Hub
+# @param $3   latest version from DockerHub
 # @param $4   update type (none/major/minor/patch/unknown)
 #
 function print_table_row() {
@@ -468,7 +558,7 @@ function print_table_row() {
     case "$update_type" in
         "major")
             update_color="$UPDATE_MAJOR_COLOR"
-            update_label="${UPDATE_MAJOR_LABEL^^}"
+            update_label="$UPDATE_MAJOR_LABEL"
             ;;
         "minor")
             update_color="$UPDATE_MINOR_COLOR"
@@ -511,11 +601,11 @@ function print_table_row() {
     local -i latest_pad=$((COL_LATEST_WIDTH - ${#latest_prefix} - ${#latest_diff}))
 
     # the update type and the version diff share the same highlight style;
-    # COLOR_VERSION_DIFF starts with an SGR reset, so bold must come after it
+    # COLOR_HIGHLIGHT starts with an SGR reset, so bold must come after it
     local update_style="" # Update column label - every updated row
     local diff_style=""   # latest version diff - only when the diff is visible
     if [[ "$update_type" != "none" ]]; then
-        update_style="${COLOR_VERSION_DIFF}${BOLD}"
+        update_style="${COLOR_HIGHLIGHT}${BOLD}"
         if [[ -n "$latest_diff" ]]; then
             diff_style="$update_style"
         fi
@@ -535,7 +625,7 @@ function print_table_row() {
 }
 
 #
-# Fetches latest valid Docker image tag from Docker Hub.
+# Fetches latest valid Docker image tag from DockerHub.
 # Example:
 #   "postgres" "16.4"     → "16.4" or newer (without a '-suffix')
 #   "redis" "8.0.1-noble" → "8.0.1-noble" or newer (with the same or a different Ubuntu codename)
@@ -558,7 +648,7 @@ function fetch_latest_docker_image_tag() {
         api_image="library/$image"
     fi
 
-    # try to fetch tags from Docker Hub API
+    # try to fetch tags from DockerHub API
     local -r url="https://hub.docker.com/v2/repositories/${api_image}/tags?page_size=100"
     local latest_tag=""
     local -i attempt
@@ -744,14 +834,25 @@ function print_summary() {
 # Prints formatted table and summary statistics.
 #
 function main() {
+    parse_args "$@"
+
     # run unit tests first - a broken version parser must never produce misleading version tables
     if ! run_version_function_tests; then
         log_error "Version function unit tests failed"
+        if [[ -n "$JSON_OUTPUT" ]]; then
+            emit_json_error "Version function unit tests failed"
+        fi
         exit 1
     fi
 
     # exits if .env is missing
-    load_env_file
+    if [[ ! -r "$INPUT_FILE" ]]; then
+        log_error "File '$INPUT_FILE' does not exist or is not readable"
+        if [[ -n "$JSON_OUTPUT" ]]; then
+            emit_json_error "File '$INPUT_FILE' does not exist or is not readable"
+        fi
+        exit 1
+    fi
 
     # parse file file to build Docker images array dynamically
     log_info "Parsing '$INPUT_FILE' for Docker images"
@@ -763,12 +864,20 @@ function main() {
     
     if [[ ${#DOCKER_IMAGES[@]} -eq 0 ]]; then
         log_error "No Docker images found"
+        if [[ -n "$JSON_OUTPUT" ]]; then
+            emit_json_error "No Docker images found"
+        fi
         exit 1
     fi
     
-    log_info "Checking ${#DOCKER_IMAGES[@]} Docker images on Docker Hub"
-    echo
-    print_table_header
+
+    if [[ -z "$JSON_OUTPUT" ]]; then
+        log_info "Checking ${#DOCKER_IMAGES[@]} Docker images on DockerHub (-h for help, --json for JSON output)"
+        echo
+        print_table_header
+    else
+        log_info "Checking ${#DOCKER_IMAGES[@]} Docker images on DockerHub (with JSON output)"
+    fi
 
     local -i total_updates=0
     local -i major_updates=0
@@ -787,6 +896,13 @@ function main() {
         IFS=':' read -r image variable_name current_version <<< "$image_info"
         local latest_tag
         latest_tag=$(fetch_latest_docker_image_tag "$image" "$current_version")
+
+        # fetch_latest_docker_image_tag returns 1 when it fell back to the current version
+        local -i fetch_result=$?
+        local fetch_failed="false"
+        if [[ $fetch_result -ne 0 ]]; then
+            fetch_failed="true"
+        fi
 
         # compare versions
         local current_version_normalized
@@ -810,17 +926,34 @@ function main() {
           esac
         fi
 
-        # separator_line - especially useful is previous image has notes
-        if [ "$row_num" -gt 1 ]; then
-            generate_horizontal_line "├" "┼" "┤"
-        fi
+        if [[ -n "$JSON_OUTPUT" ]]; then
+            IMAGE_ROWS_JSON+=("$(build_image_json_row \
+                "$image" \
+                "$variable_name" \
+                "$current_version" \
+                "$latest_tag" \
+                "$update_type" \
+                "$fetch_failed" \
+                "${IMAGES_INFO_MAP[$image]:-}" \
+                "${IMAGES_WARNINGS_MAP[$image]:-}" \
+                "${IMAGES_ERRORS_MAP[$image]:-}")")
+        else
+            # separator_line - especially useful is previous image has notes
+            if [ "$row_num" -gt 1 ]; then
+                generate_horizontal_line "├" "┼" "┤"
+            fi
 
-        print_table_row "$row_num" "$image" "$current_version" "$latest_tag" "$update_type"
+            print_table_row "$row_num" "$image" "$current_version" "$latest_tag" "$update_type"
+        fi
         ((row_num++))
     done
     
-    print_table_footer
-    print_summary "${#DOCKER_IMAGES[@]}" "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates"
+    if [[ -n "$JSON_OUTPUT" ]]; then
+        emit_json_output IMAGE_ROWS_JSON "${#DOCKER_IMAGES[@]}" "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates"
+    else
+        print_table_footer
+        print_summary "${#DOCKER_IMAGES[@]}" "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates"
+    fi
 }
 
 main "$@"

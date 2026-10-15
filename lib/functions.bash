@@ -12,7 +12,7 @@ if [[ -t 1 && -t 2 ]]; then
     readonly COLOR_WARN='\033[0;33m'         # yellow
     readonly COLOR_INFO='\033[0;32m'         # green
     readonly COLOR_DEBUG='\033[0;36m'        # cyan
-    readonly COLOR_VERSION_DIFF='\033[0;31m' # red
+    readonly COLOR_HIGHLIGHT='\033[0;31m' # red
     readonly BOLD='\033[1m'
 # when not in a terminal, each color code becomes a no-op, so messages become plain text
 else
@@ -22,16 +22,21 @@ else
     readonly COLOR_WARN=''
     readonly COLOR_INFO=''
     readonly COLOR_DEBUG=''
-    readonly COLOR_VERSION_DIFF=''
+    readonly COLOR_HIGHLIGHT=''
     readonly BOLD=''
 fi
 
 #
-# Logs a message.
+# Logs a message. When JSON_OUTPUT is set, the message goes to stderr, keeping stdout clean for the JSON document.
+
 # $@ - message, possibly with ANSI colors
 #
 function log_raw() {
-    echo -e "$(date --iso-8601=seconds) $@"
+    if [[ -n "${JSON_OUTPUT:-}" ]]; then
+        echo -e "$(date --iso-8601=seconds) $@" >&2
+    else
+        echo -e "$(date --iso-8601=seconds) $@"
+    fi
 }
 
 # errors are not sent to stderr - to ease output redirection
@@ -44,9 +49,10 @@ function log_debug() { log_raw "${COLOR_DEBUG}[DEBUG]${COLOR_RESET} $*";  }
 # Loads environment variables from '.env' file in the parent directory.
 # Exits with error if the file doesn't exist or isn't readable.
 #
+# @param $1   path to the env file to load (optional, defaults to '.env' in the caller's parent directory)
+#
 function load_env_file() {
-    local env_file
-    env_file="$(dirname "$0")/../.env"
+    local env_file=${1:-"$(dirname "$0")/../.env"}
 
     if ! ensure_files_exist "$env_file"; then
         log_error "Please generate the above file according to instructions in README.md"
