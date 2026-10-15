@@ -3,10 +3,9 @@
 #
 
 #
-# Prints a JSON error document on stdout. Used for error exits in JSON mode
-# (log messages go to stderr, see log_raw).
+# Prints a JSON error document on stdout. Used for error exits in JSON mode (log messages go to stderr).
 #
-# @param $1   error message
+# @param $1   {error: "error message"}
 #
 function emit_json_error() {
     local -r message=${1?Missing message}
@@ -15,10 +14,10 @@ function emit_json_error() {
 
 #
 # Converts the given strings to a JSON array of strings.
-# Messages are always single-line (parsed from '.env' comment newline_separated_string), so newline separation is safe.
+# Messages are always single-line (parsed from '# comment' lines), so newline separation is safe.
 #
 # @param $@   strings to convert
-# @return     JSON array literal (e.g. '["msg1","msg2"]')
+# @return     JSON array literal: ["msg1","msg2"]
 #
 function convert_to_json_array() {
     # printf '%s\n' with zero arguments would still print one empty line, which would become [""] instead of []
@@ -29,8 +28,8 @@ function convert_to_json_array() {
 
     # 1. each item of $@ becomes a separate argument to printf and therefore a separate line in the output
     # 2. --raw-input wraps each line in double quotes
-    # 3. --slurp collects all newline_separated_string into an array
-    # 4. --compact-output removes whitespace
+    # 3. --slurp collects all lines into an array
+    # 4. --compact-output to avoid JSON pretty formatting
     printf '%s\n' "$@" | jq --raw-input . | jq --slurp --compact-output .
 }
 
@@ -59,14 +58,14 @@ function split_by_newline_to_json_array() {
 }
 
 #
-# Builds a compact JSON object for one checked image (see emit_json_output for the document structure).
+# Builds a compact JSON object for one checked image.
 #
 # @param $1   Docker image name
-# @param $2   version variable name (e.g. REDIS_VERSION)
+# @param $2   version variable name (e.g. TEST_VERSION)
 # @param $3   current (local) version
-# @param $4   latest version from Docker Hub
-# @param $5   update type (none/major/minor/patch/unknown)
-# @param $6   'true' when the Docker Hub fetch failed and the local version was used as fallback
+# @param $4   latest version from DockerHub
+# @param $5   update type (none/major/minor/patch/special)
+# @param $6   'true' when the DockerHub fetch failed (and the local version was used as fallback)
 # @param $7   info messages (newline-separated, empty if none)
 # @param $8   warning messages (newline-separated, empty if none)
 # @param $9   error messages (newline-separated, empty if none)
@@ -83,17 +82,17 @@ function build_image_json_row() {
     local -r warnings=${8?Missing warnings}
     local -r errors=${9?Missing errors}
 
-    # --argjson outputs raw numbers and booleans
+    # --argjson outputs raw numbers and booleans as-is
     jq --compact-output --null-input \
-        --arg image "$image" \
-        --arg variable "$variable_name" \
-        --arg localVersion "$local_version" \
-        --arg latestVersion "$latest_version" \
-        --arg updateType "$update_type" \
-        --argjson fetchFailed "$fetch_failed" \
-        --argjson info "$(split_by_newline_to_json_array "$infos")" \
-        --argjson warnings "$(split_by_newline_to_json_array "$warnings")" \
-        --argjson errors "$(split_by_newline_to_json_array "$errors")" \
+        --arg image             "$image" \
+        --arg variable          "$variable_name" \
+        --arg localVersion      "$local_version" \
+        --arg latestVersion     "$latest_version" \
+        --arg updateType        "$update_type" \
+        --argjson fetchFailed   "$fetch_failed" \
+        --argjson info          "$(split_by_newline_to_json_array "$infos")" \
+        --argjson warnings      "$(split_by_newline_to_json_array "$warnings")" \
+        --argjson errors        "$(split_by_newline_to_json_array "$errors")" \
         '{image: $image, variable: $variable, localVersion: $localVersion, latestVersion: $latestVersion, updateType: $updateType, fetchFailed: $fetchFailed, info: $info, warnings: $warnings, errors: $errors}'
 }
 
@@ -108,11 +107,11 @@ function build_image_json_row() {
 # @param $5   number of minor updates
 # @param $6   number of patch updates
 # @param $7   number of special updates
-# @param $8   number of images whose fetch succeeded (after 'shift')
-# @param $9   number of images whose fetch failed (after 'shift')
-# @param $10  elapsed time in seconds (after 'shift')
+# @param $8   number of images whose fetch succeeded
+# @param $9   number of images whose fetch failed
+# @param $10  elapsed time in seconds
 #
-function emit_json_output() {
+function emit_image_json_output() {
     local -n image_rows_json=${1?Missing image_rows_json}
     shift
     local -r total_images=${1?Missing total_images}
@@ -126,7 +125,7 @@ function emit_json_output() {
     local -r elapsed_seconds=${9?Missing elapsed_seconds}
 
     # 'printf' with no arguments would still print one empty line, breaking 'jq --slurp';
-    # --argjson skips wrapping in quotes - the numbers are already valid JSON
+    # --argjson skips wrapping in quotes - numbers are already valid JSON
     if [[ ${#image_rows_json[@]} -eq 0 ]]; then
         printf ''
     else

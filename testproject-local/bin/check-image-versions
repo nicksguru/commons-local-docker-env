@@ -30,7 +30,7 @@ INPUT_FILE="$DIR/../.env"
 # when set to 1 by parse_args, results are printed as a JSON document on stdout
 JSON_OUTPUT=""
 
-# compact JSON objects (one per image), collected in JSON mode and assembled by emit_json_output
+# compact JSON objects (one per image), collected in JSON mode and assembled by emit_image_json_output
 declare -a IMAGE_ROWS_JSON
 
 readonly SLEEP_IF_TOO_MANY_REQUESTS=5s
@@ -152,6 +152,20 @@ function parse_args() {
     if [[ $# -gt 0 ]]; then
         print_usage >&2
         exit 1
+    fi
+}
+
+#
+# Logs an error message and, when JSON output mode is enabled, also emits a JSON error document on stdout.
+#
+# @param $1   error message
+#
+function emit_error() {
+    local -r message=${1?Missing message}
+    log_error "$message"
+
+    if [[ -n "$JSON_OUTPUT" ]]; then
+        emit_json_error "$message"
     fi
 }
 
@@ -841,30 +855,23 @@ EOF
 
 #
 # Main execution function that orchestrates the version checking process.
-# Prints formatted table and summary statistics.
+# Prints formatted table/JSON and summary statistics.
 #
 function main() {
     parse_args "$@"
 
     # run unit tests first - a broken version parser must never produce misleading version tables
     if ! run_version_function_tests; then
-        log_error "Version function unit tests failed"
-        if [[ -n "$JSON_OUTPUT" ]]; then
-            emit_json_error "Version function unit tests failed"
-        fi
+        emit_error "Version function unit tests failed"
         exit 1
     fi
 
-    # exits if .env is missing
     if [[ ! -r "$INPUT_FILE" ]]; then
-        log_error "File '$INPUT_FILE' does not exist or is not readable"
-        if [[ -n "$JSON_OUTPUT" ]]; then
-            emit_json_error "File '$INPUT_FILE' does not exist or is not readable"
-        fi
+        emit_error "File '$INPUT_FILE' does not exist or is not readable"
         exit 1
     fi
 
-    # parse file file to build Docker images array dynamically
+    # build Docker images array dynamically
     log_info "Parsing '$INPUT_FILE' for Docker images"
     parse_input_file "$INPUT_FILE"
     
@@ -873,14 +880,10 @@ function main() {
     collect_docker_images DOCKER_IMAGES
     
     if [[ ${#DOCKER_IMAGES[@]} -eq 0 ]]; then
-        log_error "No Docker images found"
-        if [[ -n "$JSON_OUTPUT" ]]; then
-            emit_json_error "No Docker images found"
-        fi
+        emit_error "No Docker images found"
         exit 1
     fi
     
-
     if [[ -z "$JSON_OUTPUT" ]]; then
         log_info "Checking ${#DOCKER_IMAGES[@]} Docker images on DockerHub (-h for help, --json for JSON output)"
         echo
@@ -899,7 +902,6 @@ function main() {
     local -i start_seconds=$SECONDS
 
     local -i row_num=1
-
     for image_info in "${DOCKER_IMAGES[@]}"; do
         # rate limiting delay
         if [ "$row_num" -gt 1 ] ; then
@@ -907,9 +909,10 @@ function main() {
         fi
 
         IFS=':' read -r image variable_name current_version <<< "$image_info"
+
         local latest_tag
+        # function returns 1 when it fell back to the current version
         latest_tag=$(fetch_latest_docker_image_tag "$image" "$current_version")
-        # fetch_latest_docker_image_tag returns 1 when it fell back to the current version
         local -i fetch_result=$?
         local fetch_failed="false"
 
@@ -938,7 +941,7 @@ function main() {
               "major") ((major_updates++));;
               "minor") ((minor_updates++));;
               "patch") ((patch_updates++));;
-              *) ((special_updates++));;
+              *)       ((special_updates++));;
           esac
         fi
 
@@ -954,20 +957,21 @@ function main() {
                 "${IMAGES_WARNINGS_MAP[$image]:-}" \
                 "${IMAGES_ERRORS_MAP[$image]:-}")")
         else
-            # separator_line - especially useful is previous image has notes
+            # separator_line - especially useful is previous image had notes
             if [ "$row_num" -gt 1 ]; then
                 generate_horizontal_line "├" "┼" "┤"
             fi
 
             print_table_row "$row_num" "$image" "$current_version" "$latest_tag" "$update_type"
         fi
+
         ((row_num++))
     done
 
     local -i elapsed_seconds=$((SECONDS - start_seconds))
 
     if [[ -n "$JSON_OUTPUT" ]]; then
-        emit_json_output IMAGE_ROWS_JSON "${#DOCKER_IMAGES[@]}" \
+        emit_image_json_output IMAGE_ROWS_JSON "${#DOCKER_IMAGES[@]}" \
         "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates" \
         "$successful_images" "$failed_images" "$elapsed_seconds"
     else
