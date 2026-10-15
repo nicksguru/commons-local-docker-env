@@ -108,6 +108,9 @@ function build_image_json_row() {
 # @param $5   number of minor updates
 # @param $6   number of patch updates
 # @param $7   number of special updates
+# @param $8   number of images whose fetch succeeded (after 'shift')
+# @param $9   number of images whose fetch failed (after 'shift')
+# @param $10  elapsed time in seconds (after 'shift')
 #
 function emit_json_output() {
     local -n image_rows_json=${1?Missing image_rows_json}
@@ -118,6 +121,9 @@ function emit_json_output() {
     local -r minor_updates=${4?Missing minor_updates}
     local -r patch_updates=${5?Missing patch_updates}
     local -r special_updates=${6?Missing special_updates}
+    local -r successful_images=${7?Missing successful_images}
+    local -r failed_images=${8?Missing failed_images}
+    local -r elapsed_seconds=${9?Missing elapsed_seconds}
 
     # 'printf' with no arguments would still print one empty line, breaking 'jq --slurp';
     # --argjson skips wrapping in quotes - the numbers are already valid JSON
@@ -126,21 +132,29 @@ function emit_json_output() {
     else
         printf '%s\n' "${image_rows_json[@]}"
     fi | jq --slurp \
-        --argjson totalImages "$total_images" \
+        --argjson totalImages       "$total_images" \
         --argjson imagesWithUpdates "$total_updates" \
-        --argjson major "$major_updates" \
-        --argjson minor "$minor_updates" \
-        --argjson patch "$patch_updates" \
-        --argjson special "$special_updates" \
+        --argjson major             "$major_updates" \
+        --argjson minor             "$minor_updates" \
+        --argjson patch             "$patch_updates" \
+        --argjson special           "$special_updates" \
+        --argjson successfulImages  "$successful_images" \
+        --argjson failedImages      "$failed_images" \
+        --argjson elapsedSeconds    "$elapsed_seconds" \
         '{
             images: .,
             summary: {
-                totalImages: $totalImages,
+                elapsedSeconds: $elapsedSeconds,
+                checkedImages: {
+                    total:      $totalImages,
+                    successful: $successfulImages,
+                    failed:     $failedImages
+                },
                 imagesWithUpdates: {
-                    total: $imagesWithUpdates,
-                    major: $major,
-                    minor: $minor,
-                    patch: $patch,
+                    total:   $imagesWithUpdates,
+                    major:   $major,
+                    minor:   $minor,
+                    patch:   $patch,
                     special: $special
                 }
             }

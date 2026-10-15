@@ -105,11 +105,24 @@ function print_usage() {
       "warnings": [
         "warning message"
       ],
-      "errors": [
-        "error message"
-      ]
+      "errors": []
     }
-  ]
+  ],
+  "summary": {
+    "elapsedSeconds": 4,
+    "checkedImages": {
+      "total": 4,
+      "successful": 3,
+      "failed": 1
+    },
+    "imagesWithUpdates": {
+      "total": 3,
+      "major": 1,
+      "minor": 1,
+      "patch": 0,
+      "special": 1
+    }
+  }
 }
 EOF
 }
@@ -810,6 +823,9 @@ function print_image_notes() {
 # @param $4   number of minor updates
 # @param $5   number of patch updates
 # @param $6   number of special updates
+# @param $7   number of images whose fetch succeeded
+# @param $8   number of images whose fetch failed
+# @param $9   elapsed time in seconds
 #
 function print_summary() {
     local -r total_images=${1?Missing total_images}
@@ -818,15 +834,24 @@ function print_summary() {
     local -r minor_updates=${4?Missing minor_updates}
     local -r patch_updates=${5?Missing patch_updates}
     local -r special_updates=${6?Missing special_updates}
-    
-    echo
-    echo "Total images checked: $total_images"
-    echo "Images with updates:  $total_updates"
-    echo -e "  • $UPDATE_MAJOR_LABEL:   ${major_updates}"
-    echo -e "  • $UPDATE_MINOR_LABEL:   ${minor_updates}"
-    echo -e "  • $UPDATE_PATCH_LABEL:   ${patch_updates}"
-    echo -e "  • $UPDATE_SPECIAL_LABEL: ${special_updates}"
-    echo
+    local -r successful_images=${7?Missing successful_images}
+    local -r failed_images=${8?Missing failed_images}
+    local -r elapsed_seconds=${9?Missing elapsed_seconds}
+
+    cat <<EOF
+Time elapsed: $elapsed_seconds sec.
+
+Total images processed: $total_images
+  • successful: $successful_images
+  • failed:     $failed_images
+
+Images with updates: $total_updates
+  • $UPDATE_MAJOR_LABEL:   $major_updates
+  • $UPDATE_MINOR_LABEL:   $minor_updates
+  • $UPDATE_PATCH_LABEL:   $patch_updates
+  • $UPDATE_SPECIAL_LABEL: $special_updates
+
+EOF
 }
 
 #
@@ -884,6 +909,9 @@ function main() {
     local -i minor_updates=0
     local -i patch_updates=0
     local -i special_updates=0
+    local -i successful_images=0
+    local -i failed_images=0
+    local -i start_seconds=$SECONDS
 
     local -i row_num=1
 
@@ -896,12 +924,15 @@ function main() {
         IFS=':' read -r image variable_name current_version <<< "$image_info"
         local latest_tag
         latest_tag=$(fetch_latest_docker_image_tag "$image" "$current_version")
-
         # fetch_latest_docker_image_tag returns 1 when it fell back to the current version
         local -i fetch_result=$?
         local fetch_failed="false"
+
         if [[ $fetch_result -ne 0 ]]; then
             fetch_failed="true"
+            ((failed_images++))
+        else
+            ((successful_images++))
         fi
 
         # compare versions
@@ -947,12 +978,18 @@ function main() {
         fi
         ((row_num++))
     done
-    
+
+    local -i elapsed_seconds=$((SECONDS - start_seconds))
+
     if [[ -n "$JSON_OUTPUT" ]]; then
-        emit_json_output IMAGE_ROWS_JSON "${#DOCKER_IMAGES[@]}" "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates"
+        emit_json_output IMAGE_ROWS_JSON "${#DOCKER_IMAGES[@]}" \
+        "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates" \
+        "$successful_images" "$failed_images" "$elapsed_seconds"
     else
         print_table_footer
-        print_summary "${#DOCKER_IMAGES[@]}" "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates"
+        print_summary "${#DOCKER_IMAGES[@]}" \
+        "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates" \
+        "$successful_images" "$failed_images" "$elapsed_seconds"
     fi
 }
 
