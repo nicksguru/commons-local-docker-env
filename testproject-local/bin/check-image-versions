@@ -105,7 +105,7 @@ function print_usage() {
   ],
   "summary": {
     "elapsedSeconds":    4,
-    "checkedImages":     {"total":4, "successful":3, "failed":1},
+    "checks":            {"total":4, "successful":3, "failed":1},
     "imagesWithUpdates": {"total":3, "major":1, "minor":1, "patch":0, "special":1}
   }
 }
@@ -838,17 +838,9 @@ function print_summary() {
     local -r elapsed_seconds=${9?Missing elapsed_seconds}
 
     cat <<EOF
-Time elapsed: $elapsed_seconds sec.
-
-Total images processed: $total_images
-  • successful: $successful_images
-  • failed:     $failed_images
-
-Images with updates: $total_updates
-  • $UPDATE_MAJOR_LABEL:   $major_updates
-  • $UPDATE_MINOR_LABEL:   $minor_updates
-  • $UPDATE_PATCH_LABEL:   $patch_updates
-  • $UPDATE_SPECIAL_LABEL: $special_updates
+Time elapsed:        $elapsed_seconds sec.
+Total images:        $total_images ($successful_images checked, $failed_images failed)
+Images with updates: $total_updates ($major_updates $UPDATE_MAJOR_LABEL, $minor_updates $UPDATE_MINOR_LABEL, $patch_updates $UPDATE_PATCH_LABEL, $special_updates $UPDATE_SPECIAL_LABEL)
 
 EOF
 }
@@ -972,13 +964,13 @@ function main() {
 
     if [[ -n "$JSON_OUTPUT" ]]; then
         emit_image_json_output IMAGE_ROWS_JSON "${#DOCKER_IMAGES[@]}" \
-        "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates" \
-        "$successful_images" "$failed_images" "$elapsed_seconds"
+          "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates" \
+          "$successful_images" "$failed_images" "$elapsed_seconds"
     else
         print_table_footer
         print_summary "${#DOCKER_IMAGES[@]}" \
-        "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates" \
-        "$successful_images" "$failed_images" "$elapsed_seconds"
+          "$total_updates" "$major_updates" "$minor_updates" "$patch_updates" "$special_updates" \
+          "$successful_images" "$failed_images" "$elapsed_seconds"
     fi
 }
 

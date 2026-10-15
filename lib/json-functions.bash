@@ -144,7 +144,7 @@ function emit_image_json_output() {
             images: .,
             summary: {
                 elapsedSeconds: $elapsedSeconds,
-                checkedImages: {
+                checks: {
                     total:      $totalImages,
                     successful: $successfulImages,
                     failed:     $failedImages
