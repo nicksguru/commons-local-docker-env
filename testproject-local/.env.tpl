@@ -19,7 +19,7 @@ ALL_COMPOSE_PROFILES=postgres,mongodb,redis,kafka,keycloak
 
 # TAG: https://hub.docker.com/r/timescale/timescaledb-ha/tags
 # INFO: keep version number in sync with TestContainers
-POSTGRES_IMAGE_VERSION=pg18.6-ts2.30.2
+POSTGRES_IMAGE_VERSION=pg18.6-ts2.31.0
 
 # inside Docker
 SQL_HOST=postgres
