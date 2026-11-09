@@ -61,7 +61,7 @@ MONGODB_PASSWORD=${DEFAULT_PASSWORD}
 # TAG: https://hub.docker.com/_/redis/tags
 # INFO: starting with v8.0, the license reverted to AGPLv3
 # INFO: keep version number in sync with TestContainers
-REDIS_IMAGE_VERSION=8.10.2-alpine
+REDIS_IMAGE_VERSION=8.10.3-alpine
 
 REDIS_HOST=redis
 REDIS_PORT=6379
@@ -75,7 +75,7 @@ REDIS_PERSISTENCE=yes
 AKHQ_IMAGE_VERSION=0.28.0
 
 # TAG: https://hub.docker.com/r/confluentinc/cp-kafka/tags
-KAFKA_IMAGE_VERSION=8.3.2
+KAFKA_IMAGE_VERSION=8.4.0
 
 # let subscribers create topics
 KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
@@ -114,6 +114,6 @@ KAFKA1_CONTROLLER_PORT=9292
 #############################################################################
 
 # TAG: https://hub.docker.com/r/keycloak/keycloak/tags
-KEYCLOAK_IMAGE_VERSION=26.8.1-0
+KEYCLOAK_IMAGE_VERSION=26.8.2-0
 KEYCLOAK_ADMIN=${DEFAULT_USERNAME}
 KEYCLOAK_ADMIN_PASSWORD=${DEFAULT_PASSWORD}
